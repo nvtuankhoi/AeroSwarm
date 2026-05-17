@@ -85,11 +85,15 @@ public class MavlinkWorker : BackgroundService
                 {
                     if (data.Length < headerLen + 28) continue;
                     var payload = data.AsSpan(headerLen);
-                    int lat = BitConverter.ToInt32(payload[0..4]);
-                    int lon = BitConverter.ToInt32(payload[4..8]);
-                    int relAlt = BitConverter.ToInt32(payload[12..16]);
-                    short vx = BitConverter.ToInt16(payload[16..18]);
-                    short vy = BitConverter.ToInt16(payload[18..20]);
+                    // MAVLink v2 wire layout:
+                    // [0-3]=time_boot_ms, [4-7]=lat(degE7), [8-11]=lon(degE7),
+                    // [12-15]=alt_msl(mm), [16-19]=relative_alt(mm),
+                    // [20-21]=vx(cm/s), [22-23]=vy(cm/s), [24-25]=vz, [26-27]=hdg(cdeg)
+                    int lat    = BitConverter.ToInt32(payload[4..8]);
+                    int lon    = BitConverter.ToInt32(payload[8..12]);
+                    int relAlt = BitConverter.ToInt32(payload[16..20]);
+                    short vx   = BitConverter.ToInt16(payload[20..22]);
+                    short vy   = BitConverter.ToInt16(payload[22..24]);
                     ushort hdg = BitConverter.ToUInt16(payload[26..28]);
 
                     telemetry.Latitude = lat / 1e7;
