@@ -83,6 +83,47 @@ public class DroneCommandController : ControllerBase
         return Ok(new { message = $"LAND command sent to drone {droneId}" });
     }
 
+    [HttpPost("{droneId:int}/guided")]
+    public async Task<IActionResult> SetGuided(int droneId)
+    {
+        if (!DroneIpMap.TryGetValue(droneId, out var ip))
+            return BadRequest("Invalid drone ID");
+
+        var payload = BuildSetMode(droneId, customMode: 4);
+        await SendUdpCommand(ip, payload);
+        await LogAndBroadcast(droneId, "CMD", $"Sent SET_MODE GUIDED to Drone #{droneId}.");
+        return Ok(new { message = $"GUIDED mode set for drone {droneId}" });
+    }
+
+    [HttpPost("{droneId:int}/takeoff")]
+    public async Task<IActionResult> Takeoff(int droneId, [FromBody] TakeoffRequest req)
+    {
+        if (!DroneIpMap.TryGetValue(droneId, out var ip))
+            return BadRequest("Invalid drone ID");
+
+        float alt = req?.Altitude ?? 10.0f;
+        // MAV_CMD_NAV_TAKEOFF = 22, param7 = altitude
+        var payload = BuildCommandLong(droneId, 22, param7: alt);
+        await SendUdpCommand(ip, payload);
+        await LogAndBroadcast(droneId, "CMD", $"Sent TAKEOFF to {alt}m → Drone #{droneId}.");
+        return Ok(new { message = $"TAKEOFF command sent to drone {droneId} (alt={alt}m)" });
+    }
+
+    [HttpPost("{droneId:int}/goto")]
+    public async Task<IActionResult> Goto(int droneId, [FromBody] GotoRequest req)
+    {
+        if (!DroneIpMap.TryGetValue(droneId, out var ip))
+            return BadRequest("Invalid drone ID");
+
+        if (req == null) return BadRequest("Missing body");
+
+        var payload = BuildPositionTarget(droneId, req.Lat, req.Lon, req.Alt);
+        await SendUdpCommand(ip, payload);
+        await LogAndBroadcast(droneId, "CMD",
+            $"GOTO ({req.Lat:F5}, {req.Lon:F5}) alt={req.Alt}m → Drone #{droneId}.");
+        return Ok(new { message = $"GOTO sent to drone {droneId}" });
+    }
+
     private async Task SendUdpCommand(string ip, byte[] payload)
     {
         using var udp = new UdpClient();
@@ -111,6 +152,31 @@ public class DroneCommandController : ControllerBase
         payload[4] = (byte)droneId;
         payload[5] = 1;
         return WrapMavlink2(11, 255, 190, payload);
+    }
+
+    /// <summary>
+    /// SET_POSITION_TARGET_GLOBAL_INT (MSG_ID 86) — position-only, MAV_FRAME_GLOBAL_RELATIVE_ALT.
+    /// type_mask = 0x07F8 → use lat/lon/alt, ignore vel/acc/yaw.
+    /// </summary>
+    private static byte[] BuildPositionTarget(int droneId, double lat, double lon, float alt)
+    {
+        // Payload: uint32 time_boot_ms | int32 lat_int | int32 lon_int | float alt |
+        //          float vx,vy,vz,afx,afy,afz,yaw,yaw_rate (zero) |
+        //          uint16 type_mask | uint8 target_system | uint8 target_component | uint8 frame
+        var payload = new byte[53];
+        int o = 0;
+
+        BitConverter.GetBytes((uint)0).CopyTo(payload, o);       o += 4; // time_boot_ms
+        BitConverter.GetBytes((int)(lat * 1e7)).CopyTo(payload, o); o += 4; // lat_int
+        BitConverter.GetBytes((int)(lon * 1e7)).CopyTo(payload, o); o += 4; // lon_int
+        BitConverter.GetBytes(alt).CopyTo(payload, o);           o += 4; // alt
+        o += 32; // vx,vy,vz,afx,afy,afz,yaw,yaw_rate = 0 (8 floats × 4)
+        BitConverter.GetBytes((ushort)0x07F8).CopyTo(payload, o); o += 2; // type_mask: position only
+        payload[o++] = (byte)droneId; // target_system
+        payload[o++] = 1;             // target_component
+        payload[o]   = 6;             // coordinate_frame: MAV_FRAME_GLOBAL_RELATIVE_ALT
+
+        return WrapMavlink2(86, 255, 190, payload);
     }
 
     private static byte[] WrapMavlink2(uint msgId, byte sysId, byte compId, byte[] payload)
@@ -158,3 +224,6 @@ public class DroneCommandController : ControllerBase
         });
     }
 }
+
+public record TakeoffRequest(float Altitude);
+public record GotoRequest(double Lat, double Lon, float Alt);

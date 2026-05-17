@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { HubConnectionBuilder } from '@microsoft/signalr'
@@ -32,9 +32,13 @@ function batteryIcon(pct) {
   return 'battery_1_bar'
 }
 
-function createDroneIcon(color, heading) {
+function createDroneIcon(color, heading, isSelected = false) {
+  const ring = isSelected
+    ? `<circle cx="16" cy="16" r="15" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.9" stroke-dasharray="4 3"/>`
+    : ''
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+      ${ring}
       <g transform="rotate(${heading}, 16, 16)">
         <polygon points="16,4 26,28 16,22 6,28"
           fill="${color}"
@@ -45,7 +49,7 @@ function createDroneIcon(color, heading) {
       </g>
       <defs>
         <filter id="glow">
-          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+          <feGaussianBlur stdDeviation="${isSelected ? 3 : 2}" result="coloredBlur"/>
           <feMerge>
             <feMergeNode in="coloredBlur"/>
             <feMergeNode in="SourceGraphic"/>
@@ -78,7 +82,19 @@ function MapCenterUpdater({ drones }) {
   return null
 }
 
-function DroneTelemetryCard({ droneId, drone, onCommand }) {
+// Listens for map clicks; if a drone is selected → fires onGoto with lat/lon
+function MapClickHandler({ selectedDroneId, onGoto }) {
+  useMapEvents({
+    click: (e) => {
+      if (selectedDroneId) {
+        onGoto(selectedDroneId, e.latlng.lat, e.latlng.lng)
+      }
+    }
+  })
+  return null
+}
+
+function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, isSelected }) {
   const color = droneColor(drone)
   const colorClass = !drone || !drone.isArmed
     ? 'border-t-error text-error'
@@ -168,7 +184,7 @@ function DroneTelemetryCard({ droneId, drone, onCommand }) {
         </div>
       </div>
 
-      {/* Command Buttons */}
+      {/* Command Buttons Row 1: ARM/DISARM/RTL/LAND */}
       <div className="flex gap-1.5">
         {[
           { action: 'arm', label: 'ARM', icon: 'verified', cls: 'hover:bg-secondary/20 hover:text-secondary hover:border-secondary/40' },
@@ -182,6 +198,30 @@ function DroneTelemetryCard({ droneId, drone, onCommand }) {
             {label}
           </button>
         ))}
+      </div>
+
+      {/* Command Buttons Row 2: GUIDED/TAKEOFF/SELECT (Click-to-Fly) */}
+      <div className="flex gap-1.5">
+        <button onClick={() => cmd('guided')}
+          className="flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 hover:bg-primary/20 hover:text-primary hover:border-primary/40">
+          <span className="material-symbols-outlined text-[14px]">joystick</span>
+          GUIDED
+        </button>
+        <button onClick={() => onTakeoff(droneId)}
+          className="flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 hover:bg-secondary/20 hover:text-secondary hover:border-secondary/40">
+          <span className="material-symbols-outlined text-[14px]">flight_takeoff</span>
+          TAKEOFF
+        </button>
+        <button
+          onClick={() => onSelect(droneId)}
+          className={`flex-1 border py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1
+            ${isSelected
+              ? 'bg-secondary/20 text-secondary border-secondary/60 shadow-[0_0_8px_rgba(74,225,118,0.3)]'
+              : 'bg-surface-container-high text-on-surface border-outline-variant/30 hover:bg-tertiary/20 hover:text-tertiary hover:border-tertiary/40'
+            }`}>
+          <span className="material-symbols-outlined text-[14px]">{isSelected ? 'gps_fixed' : 'navigation'}</span>
+          {isSelected ? 'TARGETING' : 'GOTO'}
+        </button>
       </div>
     </div>
   )
@@ -207,6 +247,8 @@ export default function Dashboard() {
     { time: new Date().toLocaleTimeString('en-GB'), type: 'SYS', message: 'Swarm orchestration initialized. Network heartbeat OK.' }
   ])
   const [mapCenter] = useState([34.0522, -118.2437])
+  const [selectedDroneId, setSelectedDroneId] = useState(null) // Click-to-Fly selection
+  const [gotoAlt, setGotoAlt] = useState(10)                   // Target altitude (m)
   const logsEndRef = useRef(null)
   const connectionRef = useRef(null)
 
@@ -291,6 +333,33 @@ export default function Dashboard() {
     }
   }, [sendCommand])
 
+  const sendTakeoff = useCallback(async (droneId) => {
+    const token = getToken()
+    try {
+      addLog('CMD', `TAKEOFF ${gotoAlt}m`, droneId)
+      await axios.post(`${API}/drones/${droneId}/takeoff`,
+        { altitude: gotoAlt },
+        { headers: { Authorization: `Bearer ${token}` } })
+      addLog('ACK', `TAKEOFF acknowledged`, droneId)
+    } catch (err) {
+      addLog('WARN', `TAKEOFF failed: ${err.message}`, droneId)
+    }
+  }, [addLog, gotoAlt])
+
+  const sendGoto = useCallback(async (droneId, lat, lon) => {
+    const token = getToken()
+    try {
+      addLog('CMD', `GOTO (${lat.toFixed(5)}, ${lon.toFixed(5)}) alt=${gotoAlt}m`, droneId)
+      await axios.post(`${API}/drones/${droneId}/goto`,
+        { lat, lon, alt: gotoAlt },
+        { headers: { Authorization: `Bearer ${token}` } })
+      addLog('ACK', `GOTO acknowledged`, droneId)
+      setSelectedDroneId(null) // Deselect after sending goto
+    } catch (err) {
+      addLog('WARN', `GOTO failed: ${err.message}`, droneId)
+    }
+  }, [addLog, gotoAlt])
+
   const handleLogout = () => { logout(); navigate('/') }
 
   const logTypeStyle = {
@@ -339,7 +408,7 @@ export default function Dashboard() {
           <MapContainer
             center={mapCenter}
             zoom={13}
-            style={{ position: 'absolute', inset: 0 }}
+            style={{ position: 'absolute', inset: 0, cursor: selectedDroneId ? 'crosshair' : undefined }}
             zoomControl={false}
           >
             <TileLayer
@@ -349,11 +418,14 @@ export default function Dashboard() {
               maxZoom={19}
             />
             <MapCenterUpdater drones={drones} />
+            <MapClickHandler selectedDroneId={selectedDroneId} onGoto={sendGoto} />
 
             {Object.entries(drones).map(([id, drone]) => {
               if (!drone || (drone.latitude === 0 && drone.longitude === 0)) return null
+              const numId = Number(id)
               const color = droneColor(drone)
-              const icon = createDroneIcon(color, drone.heading)
+              const isSelected = selectedDroneId === numId
+              const icon = createDroneIcon(color, drone.heading, isSelected)
               const trail = trails[id] || []
 
               return (
@@ -364,13 +436,23 @@ export default function Dashboard() {
                       pathOptions={{ color, weight: 2, opacity: 0.5, dashArray: '6 6' }}
                     />
                   )}
-                  <Marker position={[drone.latitude, drone.longitude]} icon={icon}>
+                  <Marker
+                    position={[drone.latitude, drone.longitude]}
+                    icon={icon}
+                    eventHandlers={{
+                      click: () => setSelectedDroneId(prev => prev === numId ? null : numId)
+                    }}
+                  >
                     <Popup>
-                      <div className="font-mono text-xs" style={{ color: '#d5e3fd', minWidth: 120 }}>
+                      <div className="font-mono text-xs" style={{ color: '#d5e3fd', minWidth: 130 }}>
                         <div className="font-bold" style={{ color }}>DRONE #{id}</div>
                         <div>BAT: {drone.batteryPercent}% · {drone.batteryVoltage?.toFixed(1)}V</div>
                         <div>ALT: {drone.altitude?.toFixed(1)}m · {drone.speed?.toFixed(1)} m/s</div>
                         <div>{drone.mode} | {drone.isArmed ? 'ARMED' : 'DISARMED'}</div>
+                        <div style={{ marginTop: 4, color: '#4ae176', cursor: 'pointer' }}
+                          onClick={() => setSelectedDroneId(numId)}>
+                          ▶ SELECT FOR GOTO
+                        </div>
                       </div>
                     </Popup>
                   </Marker>
@@ -378,6 +460,34 @@ export default function Dashboard() {
               )
             })}
           </MapContainer>
+
+          {/* GOTO mode indicator — shown when a drone is selected */}
+          {selectedDroneId && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] glass-panel px-4 py-2 rounded-full flex items-center gap-3 font-mono text-sm pointer-events-auto">
+              <span className="w-2 h-2 rounded-full bg-secondary animate-pulse shrink-0" />
+              <span className="text-secondary font-bold">DRONE #{selectedDroneId}</span>
+              <span className="text-on-surface-variant text-xs">SELECTED — click map to navigate</span>
+              <div className="flex items-center gap-1.5 border-l border-outline-variant/30 pl-3">
+                <span className="text-outline text-[10px] uppercase">ALT</span>
+                <input
+                  type="number"
+                  value={gotoAlt}
+                  onChange={e => setGotoAlt(Math.max(2, Math.min(120, Number(e.target.value))))}
+                  onClick={e => e.stopPropagation()}
+                  className="w-14 bg-surface-container text-on-surface text-xs font-mono px-2 py-1 rounded border border-outline-variant/30 outline-none focus:border-primary/60"
+                  min={2} max={120}
+                />
+                <span className="text-outline text-[10px]">m</span>
+              </div>
+              <button
+                onClick={() => setSelectedDroneId(null)}
+                className="text-outline hover:text-error transition-colors ml-1"
+                title="Cancel"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+          )}
 
           {/* Map HUD overlay */}
           <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2">
@@ -420,6 +530,9 @@ export default function Dashboard() {
               droneId={id}
               drone={drones[id]}
               onCommand={sendCommand}
+              onTakeoff={sendTakeoff}
+              onSelect={(dId) => setSelectedDroneId(prev => prev === dId ? null : dId)}
+              isSelected={selectedDroneId === id}
             />
           ))}
         </section>
