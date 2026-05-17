@@ -328,10 +328,18 @@ export default function Dashboard() {
   }, [addLog])
 
   const sendAll = useCallback(async (action) => {
-    for (let id = 1; id <= 5; id++) {
+    const connected = Object.entries(drones)
+      .filter(([, d]) => d !== null)
+      .map(([id]) => Number(id))
+
+    if (connected.length === 0) {
+      addLog('WARN', `No drones connected — ${action.toUpperCase()} ALL aborted.`)
+      return
+    }
+    for (const id of connected) {
       await sendCommand(id, action)
     }
-  }, [sendCommand])
+  }, [sendCommand, drones, addLog])
 
   const sendTakeoff = useCallback(async (droneId) => {
     const token = getToken()
