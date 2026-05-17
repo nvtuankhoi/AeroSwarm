@@ -6,7 +6,7 @@ Real-time dashboard giám sát và điều khiển đội drone ESP32-C3 qua gia
 
 ---
 
-## 📐 Kiến trúc
+## Kiến trúc
 
 ```
 AeroSwarm/
@@ -23,7 +23,7 @@ AeroSwarm/
         └── services/       # authService.js
 ```
 
-## 🔌 Hardware
+## Hardware
 
 | Thiết bị | Thông số |
 |---|---|
@@ -34,7 +34,7 @@ AeroSwarm/
 
 ---
 
-## 🛠️ Yêu cầu môi trường
+## Yêu cầu môi trường
 
 | Công cụ | Phiên bản |
 |---|---|
@@ -44,7 +44,7 @@ AeroSwarm/
 
 ---
 
-## 🚀 Chạy dự án
+## Chạy dự án
 
 ### 1. Clone repository
 
@@ -107,7 +107,7 @@ Mở trình duyệt tại **`http://localhost:5173`**
 
 ---
 
-## 📡 Luồng dữ liệu
+## Luồng dữ liệu
 
 ```
 ESP32-C3 Drone
@@ -129,7 +129,7 @@ Dashboard.jsx (React)
 
 ---
 
-## 🎮 Điều khiển Drone
+## Điều khiển Drone
 
 | Endpoint | Hành động |
 |---|---|
@@ -142,7 +142,7 @@ Tất cả endpoint yêu cầu header `Authorization: Bearer <token>`.
 
 ---
 
-## 🗄️ Database
+## Database
 
 SQLite file `aeroswarm.db` (tự động tạo, không cần migration):
 
@@ -153,7 +153,7 @@ SQLite file `aeroswarm.db` (tự động tạo, không cần migration):
 
 ---
 
-## ⚙️ Cấu hình
+## Cấu hình
 
 **`AeroSwarm.Api/appsettings.json`**
 ```json
@@ -175,7 +175,7 @@ const BASE_URL = 'http://localhost:5501/api'
 
 ---
 
-## 🏗️ Build production
+## Build production
 
 **Backend:**
 ```bash
@@ -192,7 +192,7 @@ npm run build
 
 ---
 
-## 📦 Tech Stack
+## Tech Stack
 
 | Layer | Công nghệ |
 |---|---|
