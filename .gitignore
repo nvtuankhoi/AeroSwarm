@@ -1,0 +1,27 @@
+# .NET / ASP.NET Core
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.db
+*.db-shm
+*.db-wal
+aeroswarm.db
+
+# Secrets & certs
+*.pfx
+*.key
+appsettings.*.json
+!appsettings.json
+
+# Node.js / Vite
+node_modules/
+dist/
+.vite/
+*.local
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
