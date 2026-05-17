@@ -17,10 +17,13 @@ AeroSwarm/
 │   ├── Models/             # DroneTelemetry, TelemetryHistory, DroneEvent
 │   ├── Data/               # AppDbContext (EF Core + SQLite)
 │   └── Program.cs
-└── aeroswarm-ui/           # React 19 + Vite 6 + Tailwind CSS
-    └── src/
-        ├── components/     # Login, Dashboard
-        └── services/       # authService.js
+├── aeroswarm-ui/           # React 19 + Vite 6 + Tailwind CSS
+│   └── src/
+│       ├── components/     # Login, Dashboard
+│       └── services/       # authService.js
+└── esp32-firmware/
+    └── drone_simulator/    # Arduino sketch — gửi MAVLink v2 giả lập
+        └── drone_simulator.ino
 ```
 
 ## Hardware
@@ -107,16 +110,44 @@ Mở trình duyệt tại **`http://localhost:5173`**
 
 ---
 
-## Luồng dữ liệu
+### 5. ESP32 Simulator (không có drone thật)
+
+Flash sketch `esp32-firmware/drone_simulator/drone_simulator.ino` lên từng ESP32.  
+Sửa 4 dòng đầu file trước khi flash:
+
+```cpp
+#define DRONE_ID    1           // 1–5, mỗi ESP32 một số khác nhau
+#define WIFI_SSID   "YourSSID"
+#define WIFI_PASS   "YourPassword"
+#define SERVER_IP   "192.168.1.100"  // IP của PC đang chạy AeroSwarm.Api
+```
+
+Mỗi ESP32 sau khi kết nối WiFi sẽ tự động gửi MAVLink v2 đến backend:
+
+| Message | Tần suất | Nội dung |
+|---|---|---|
+| HEARTBEAT (MSG 0) | 1 Hz | Mode GUIDED, trạng thái ARMED |
+| GLOBAL_POSITION_INT (MSG 33) | 5 Hz | Bay vòng tròn ~50 m, altitude dao động |
+| BATTERY_STATUS (MSG 147) | 0.2 Hz | Pin từ từ hao, reset khi hết |
+
+> **Yêu cầu:** PC và ESP32 cùng subnet. Mở firewall UDP port 14550:
+> ```powershell
+> # PowerShell (Run as Administrator)
+> netsh advfirewall firewall add rule name="AeroSwarm MAVLink UDP 14550" dir=in action=allow protocol=UDP localport=14550
+> ```
+
+---
 
 ```
 ESP32-C3 Drone
     │ MAVLink v2 UDP packet (port 14550)
     ▼
 MavlinkWorker.cs
-    │ Parse HEARTBEAT (MSG_ID 0) → mode, armed state
+    │ Parse HEARTBEAT (MSG_ID 0)           → mode, armed state
     │ Parse GLOBAL_POSITION_INT (MSG_ID 33) → lat, lon, alt, speed, heading
-    │ Parse BATTERY_STATUS (MSG_ID 147) → battery %, voltage
+    │ Parse BATTERY_STATUS (MSG_ID 147)     → battery %, voltage
+    │ Parse GPS_RAW_INT (MSG_ID 24)         → satellites visible
+    │ Parse WIND (MSG_ID 168)               → wind speed, direction
     ▼
 DroneHub.cs (SignalR)
     │ Broadcast "ReceiveTelemetry" → all connected clients
@@ -137,8 +168,18 @@ Dashboard.jsx (React)
 | `POST /api/drones/{id}/disarm` | DISARM động cơ |
 | `POST /api/drones/{id}/rtl` | Return to Launch |
 | `POST /api/drones/{id}/land` | Emergency Land |
+| `POST /api/drones/{id}/guided` | Chuyển sang chế độ GUIDED (điều khiển vị trí) |
+| `POST /api/drones/{id}/takeoff` | Cất cánh — body: `{"altitude": 10}` (mét) |
+| `POST /api/drones/{id}/goto` | Bay đến toạ độ — body: `{"latitude": 10.77, "longitude": 106.70, "altitude": 15}` |
 
 Tất cả endpoint yêu cầu header `Authorization: Bearer <token>`.
+
+### Click-to-Fly (UI)
+
+1. Nhấn nút **GUIDED** trên card drone để chuyển chế độ
+2. Nhấn **TAKEOFF** để cất cánh
+3. Nhấn **GOTO** (hoặc click marker trên bản đồ) để chọn drone → con trỏ chuyển thành crosshair
+4. Click bất kỳ điểm nào trên bản đồ → gửi lệnh GOTO đến drone
 
 ---
 
