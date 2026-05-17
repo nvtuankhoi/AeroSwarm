@@ -1,4 +1,4 @@
-# ✈️ AeroSwarm — Multi-UAV Command Center
+# AeroSwarm — Multi-UAV Command Center
 
 Real-time dashboard giám sát và điều khiển đội drone ESP32-C3 qua giao thức MAVLink v2.
 
