@@ -107,6 +107,21 @@ public class MavlinkWorker : BackgroundService
                     sbyte pct = (sbyte)payload[33];
                     telemetry.BatteryPercent = pct < 0 ? 0 : pct;
                 }
+                else if (msgId == 24) // GPS_RAW_INT — satellites_visible at payload byte 29
+                {
+                    if (data.Length < headerLen + 30) continue;
+                    var payload = data.AsSpan(headerLen);
+                    telemetry.GpsSatellites = payload[29];
+                }
+                else if (msgId == 168) // WIND — direction (rad, bytes 0-3), speed m/s (bytes 4-7)
+                {
+                    if (data.Length < headerLen + 8) continue;
+                    var payload = data.AsSpan(headerLen);
+                    float dirRad = BitConverter.ToSingle(payload[0..4]);
+                    float speed  = BitConverter.ToSingle(payload[4..8]);
+                    telemetry.WindSpeed = speed;
+                    telemetry.WindDirectionDeg = dirRad * (180f / MathF.PI);
+                }
 
                 // Push live telemetry to all SignalR clients
                 await _hubContext.Clients.All.SendAsync("ReceiveTelemetry", telemetry, stoppingToken);
@@ -151,6 +166,8 @@ public class MavlinkWorker : BackgroundService
                 BatteryPercent = t.BatteryPercent,
                 BatteryVoltage = t.BatteryVoltage,
                 LinkQuality = t.LinkQuality,
+                GpsSatellites = t.GpsSatellites,
+                WindSpeed = t.WindSpeed,
                 RecordedAt = recordedAt
             });
             await db.SaveChangesAsync();

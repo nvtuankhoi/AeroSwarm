@@ -210,6 +210,20 @@ export default function Dashboard() {
   const logsEndRef = useRef(null)
   const connectionRef = useRef(null)
 
+  // ── derived map overlay values ──────────────────────────────────────────────
+  const activeDrones = Object.values(drones).filter(Boolean)
+
+  const avgLinkQuality = activeDrones.length > 0
+    ? Math.round(activeDrones.reduce((sum, d) => sum + (d.linkQuality || 0), 0) / activeDrones.length)
+    : null
+
+  const totalGpsSats = activeDrones.reduce((sum, d) => sum + (d.gpsSatellites || 0), 0)
+
+  // Use wind data from the first drone that reports it (environmental, same for swarm)
+  const windDrone = activeDrones.find(d => d.windSpeed > 0)
+  const windSpeedKt = windDrone ? (windDrone.windSpeed * 1.944).toFixed(1) : null
+  const windDirStr  = windDrone ? headingToDir(windDrone.windDirectionDeg) : ''
+
   const addLog = useCallback((type, message, droneId = null) => {
     const time = new Date().toLocaleTimeString('en-GB')
     const prefix = droneId ? `[Drone #${droneId}] ` : ''
@@ -380,15 +394,20 @@ export default function Dashboard() {
           <div className="absolute bottom-4 right-4 z-[1000] glass-panel p-3 rounded flex gap-6 text-xs text-on-surface-variant font-mono">
             <div className="flex flex-col">
               <span className="text-outline text-[10px] uppercase tracking-widest">Wind Speed</span>
-              <span>12.4 kt NE</span>
+              <span>{windSpeedKt ? `${windSpeedKt} kt ${windDirStr}` : 'N/A'}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-outline text-[10px] uppercase tracking-widest">Data Link</span>
-              <span className="text-secondary">98% STABLE</span>
+              {avgLinkQuality === null
+                ? <span className="text-outline">NO SIGNAL</span>
+                : <span className={avgLinkQuality >= 80 ? 'text-secondary' : avgLinkQuality >= 50 ? 'text-tertiary' : 'text-error'}>
+                    {avgLinkQuality}% {avgLinkQuality >= 80 ? 'STABLE' : avgLinkQuality >= 50 ? 'DEGRADED' : 'POOR'}
+                  </span>
+              }
             </div>
             <div className="flex flex-col">
               <span className="text-outline text-[10px] uppercase tracking-widest">GPS Sats</span>
-              <span>{Object.values(drones).filter(Boolean).length * 3 + 6} Active</span>
+              <span>{activeDrones.length > 0 ? `${totalGpsSats} Active` : 'N/A'}</span>
             </div>
           </div>
         </section>

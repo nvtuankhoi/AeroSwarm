@@ -13,4 +13,7 @@ public class DroneTelemetry
     public int BatteryPercent { get; set; }
     public float BatteryVoltage { get; set; }
     public int LinkQuality { get; set; }
+    public int GpsSatellites { get; set; }    // from GPS_RAW_INT (MSG_ID 24)
+    public float WindSpeed { get; set; }       // m/s from WIND (MSG_ID 168)
+    public float WindDirectionDeg { get; set; } // degrees from WIND (MSG_ID 168)
 }

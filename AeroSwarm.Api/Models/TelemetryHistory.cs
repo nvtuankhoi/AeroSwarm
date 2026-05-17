@@ -14,5 +14,7 @@ public class TelemetryHistory
     public int BatteryPercent { get; set; }
     public float BatteryVoltage { get; set; }
     public int LinkQuality { get; set; }
+    public int GpsSatellites { get; set; }
+    public float WindSpeed { get; set; }
     public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
 }
