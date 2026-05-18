@@ -1,15 +1,18 @@
 import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, CircleMarker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { HubConnectionBuilder } from '@microsoft/signalr'
 import axios from 'axios'
 import { getToken, logout } from '../services/authService'
+import { fetchConfig, sendSetHome } from '../services/swarmService'
+import MissionPlanner from './MissionPlanner'
 
 const API = 'http://localhost:5501/api'
 const MAX_TRAIL = 20
 const MAX_LOGS = 100
+const DEFAULT_DRONE_IDS = [1, 2, 3, 4, 5]
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -82,11 +85,18 @@ function MapCenterUpdater({ drones }) {
   return null
 }
 
-// Listens for map clicks; if a drone is selected → fires onGoto with lat/lon
-function MapClickHandler({ selectedDroneId, onGoto }) {
+// Listens for map clicks. Mode precedence:
+//   planning mode → add waypoint to mission planner
+//   set-home mode → set home for all online drones, exit mode
+//   drone-selected → send GOTO to that drone
+function MapClickHandler({ planningMode, onAddWaypoint, setHomeMode, onSetHomeAll, selectedDroneId, onGoto }) {
   useMapEvents({
     click: (e) => {
-      if (selectedDroneId) {
+      if (planningMode) {
+        onAddWaypoint(e.latlng.lat, e.latlng.lng)
+      } else if (setHomeMode) {
+        onSetHomeAll(e.latlng.lat, e.latlng.lng)
+      } else if (selectedDroneId) {
         onGoto(selectedDroneId, e.latlng.lat, e.latlng.lng)
       }
     }
@@ -95,8 +105,10 @@ function MapClickHandler({ selectedDroneId, onGoto }) {
 }
 
 function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, isSelected }) {
-  const color = droneColor(drone)
-  const colorClass = !drone || !drone.isArmed
+  const isOffline = drone && drone.isOnline === false
+  const colorClass = isOffline
+    ? 'border-t-error text-error animate-pulse'
+    : !drone || !drone.isArmed
     ? 'border-t-error text-error'
     : drone?.mode === 'GUIDED'
     ? 'border-t-secondary text-secondary'
@@ -155,6 +167,11 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
               <span className={`text-[11px] font-bold uppercase tracking-widest ${statusTextClass}`}>
                 {drone.mode} | {drone.isArmed ? 'ARMED' : 'DISARMED'}
               </span>
+              {isOffline && (
+                <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-error/30 text-error border border-error/60 animate-pulse">
+                  DROPOUT
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -241,14 +258,25 @@ function TelCell({ label, value, sub, valueClass = 'text-on-surface', small = fa
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [drones, setDrones] = useState({ 1: null, 2: null, 3: null, 4: null, 5: null })
-  const [trails, setTrails] = useState({ 1: [], 2: [], 3: [], 4: [], 5: [] })
+  const [droneIds, setDroneIds] = useState(DEFAULT_DRONE_IDS)
+  const [drones, setDrones] = useState(() =>
+    Object.fromEntries(DEFAULT_DRONE_IDS.map(id => [id, null])))
+  const [trails, setTrails] = useState(() =>
+    Object.fromEntries(DEFAULT_DRONE_IDS.map(id => [id, []])))
   const [logs, setLogs] = useState([
     { time: new Date().toLocaleTimeString('en-GB'), type: 'SYS', message: 'Swarm orchestration initialized. Network heartbeat OK.' }
   ])
   const [mapCenter] = useState([34.0522, -118.2437])
   const [selectedDroneId, setSelectedDroneId] = useState(null) // Click-to-Fly selection
   const [gotoAlt, setGotoAlt] = useState(10)                   // Target altitude (m)
+
+  // Mission planner state
+  const [missionPlannerOpen, setMissionPlannerOpen] = useState(false)
+  const [missionWaypoints, setMissionWaypoints] = useState([]) // array of [lat, lon]
+
+  // Set-home mode (right-click map or via button)
+  const [setHomeMode, setSetHomeMode] = useState(false)
+
   const logsEndRef = useRef(null)
   const connectionRef = useRef(null)
 
@@ -271,6 +299,28 @@ export default function Dashboard() {
     const prefix = droneId ? `[Drone #${droneId}] ` : ''
     setLogs(prev => [...prev.slice(-MAX_LOGS + 1), { time, type, message: prefix + message }])
   }, [])
+
+  // Fetch swarm config from backend (drone count, IDs)
+  useEffect(() => {
+    let cancelled = false
+    fetchConfig()
+      .then(cfg => {
+        if (cancelled) return
+        const ids = cfg.droneIds ?? DEFAULT_DRONE_IDS
+        setDroneIds(ids)
+        setDrones(prev => {
+          const next = Object.fromEntries(ids.map(id => [id, prev[id] ?? null]))
+          return next
+        })
+        setTrails(prev => {
+          const next = Object.fromEntries(ids.map(id => [id, prev[id] ?? []]))
+          return next
+        })
+        addLog('SYS', `Swarm config loaded — ${ids.length} drone slot(s).`)
+      })
+      .catch(err => addLog('WARN', `Config fetch failed: ${err.message}`))
+    return () => { cancelled = true }
+  }, [addLog])
 
   // SignalR connection
   useEffect(() => {
@@ -295,6 +345,14 @@ export default function Dashboard() {
 
     connection.on('ReceiveEvent', (ev) => {
       addLog(ev.type, ev.message, ev.droneId || null)
+    })
+
+    connection.on('ReceiveDroneStatus', (status) => {
+      setDrones(prev => {
+        const cur = prev[status.droneId]
+        if (!cur) return prev
+        return { ...prev, [status.droneId]: { ...cur, isOnline: status.isOnline } }
+      })
     })
 
     connection.onreconnecting(() => addLog('WARN', 'SignalR reconnecting...'))
@@ -368,6 +426,60 @@ export default function Dashboard() {
     }
   }, [addLog, gotoAlt])
 
+  // ── Mission planner handlers ──────────────────────────────────────────────
+  const openMissionPlanner = useCallback(() => {
+    setMissionPlannerOpen(true)
+    setSetHomeMode(false)
+    setSelectedDroneId(null)
+  }, [])
+
+  const closeMissionPlanner = useCallback(() => {
+    setMissionPlannerOpen(false)
+  }, [])
+
+  const addMissionWaypoint = useCallback((lat, lon) => {
+    setMissionWaypoints(prev => [...prev, [lat, lon]])
+  }, [])
+
+  const removeMissionWaypoint = useCallback((idx) => {
+    setMissionWaypoints(prev => prev.filter((_, i) => i !== idx))
+  }, [])
+
+  const clearMissionWaypoints = useCallback(() => {
+    setMissionWaypoints([])
+  }, [])
+
+  const handleMissionUploaded = useCallback(() => {
+    // Reset trails so users see fresh tracks for the new mission
+    setTrails(prev => Object.fromEntries(Object.keys(prev).map(id => [id, []])))
+    setMissionWaypoints([])
+  }, [])
+
+  // ── Set Home handlers ─────────────────────────────────────────────────────
+  const toggleSetHomeMode = useCallback(() => {
+    setSetHomeMode(prev => !prev)
+    setSelectedDroneId(null)
+  }, [])
+
+  const handleSetHomeAll = useCallback(async (lat, lon) => {
+    const online = Object.values(drones).filter(d => d && d.isOnline !== false)
+    if (online.length === 0) {
+      addLog('WARN', 'No online drones — Set Home aborted.')
+      setSetHomeMode(false)
+      return
+    }
+    addLog('CMD', `Set Home (${lat.toFixed(5)}, ${lon.toFixed(5)}) → ${online.length} drone(s).`)
+    for (const d of online) {
+      try {
+        await sendSetHome(d.droneId, lat, lon, 0)
+        addLog('ACK', 'SET_HOME acknowledged', d.droneId)
+      } catch (err) {
+        addLog('WARN', `SET_HOME failed: ${err.message}`, d.droneId)
+      }
+    }
+    setSetHomeMode(false)
+  }, [drones, addLog])
+
   const handleLogout = () => { logout(); navigate('/') }
 
   const logTypeStyle = {
@@ -402,6 +514,31 @@ export default function Dashboard() {
             </button>
           ))}
           <div className="w-px h-6 bg-outline-variant/30 mx-1" />
+          <button
+            onClick={openMissionPlanner}
+            className={`px-3 py-1.5 rounded text-[11px] font-bold uppercase tracking-widest transition-colors flex items-center gap-1.5 border ${
+              missionPlannerOpen
+                ? 'bg-secondary/30 text-secondary border-secondary/60'
+                : 'bg-surface-container-high text-on-surface border-outline-variant/30 hover:bg-secondary/20 hover:text-secondary hover:border-secondary/40'
+            }`}
+            title="Plan a swarm mission (V-shape / line)"
+          >
+            <span className="material-symbols-outlined text-[14px]">route</span>
+            PLAN MISSION
+          </button>
+          <button
+            onClick={toggleSetHomeMode}
+            className={`px-3 py-1.5 rounded text-[11px] font-bold uppercase tracking-widest transition-colors flex items-center gap-1.5 border ${
+              setHomeMode
+                ? 'bg-tertiary/30 text-tertiary border-tertiary/60 animate-pulse'
+                : 'bg-surface-container-high text-on-surface border-outline-variant/30 hover:bg-tertiary/20 hover:text-tertiary hover:border-tertiary/40'
+            }`}
+            title="Click map to set home position for all online drones"
+          >
+            <span className="material-symbols-outlined text-[14px]">{setHomeMode ? 'my_location' : 'pin_drop'}</span>
+            {setHomeMode ? 'CLICK MAP' : 'SET HOME'}
+          </button>
+          <div className="w-px h-6 bg-outline-variant/30 mx-1" />
           <button onClick={handleLogout} className="text-on-surface-variant hover:text-error transition-colors p-2 rounded-full hover:bg-error/10" title="Logout">
             <span className="material-symbols-outlined text-[20px]">logout</span>
           </button>
@@ -426,7 +563,37 @@ export default function Dashboard() {
               maxZoom={19}
             />
             <MapCenterUpdater drones={drones} />
-            <MapClickHandler selectedDroneId={selectedDroneId} onGoto={sendGoto} />
+            <MapClickHandler
+              planningMode={missionPlannerOpen}
+              onAddWaypoint={addMissionWaypoint}
+              setHomeMode={setHomeMode}
+              onSetHomeAll={handleSetHomeAll}
+              selectedDroneId={selectedDroneId}
+              onGoto={sendGoto}
+            />
+
+            {/* Mission planner waypoint preview */}
+            {missionPlannerOpen && missionWaypoints.length > 0 && (
+              <Polyline
+                positions={missionWaypoints}
+                pathOptions={{ color: '#4ae176', weight: 2, opacity: 0.8, dashArray: '4 6' }}
+              />
+            )}
+            {missionPlannerOpen && missionWaypoints.map((wp, i) => (
+              <CircleMarker
+                key={`wp-${i}`}
+                center={wp}
+                radius={8}
+                pathOptions={{ color: '#4ae176', fillColor: '#4ae176', fillOpacity: 0.6, weight: 2 }}
+              >
+                <Popup>
+                  <div className="font-mono text-xs">
+                    Leader WP #{i + 1}<br />
+                    {wp[0].toFixed(5)}, {wp[1].toFixed(5)}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
             {Object.entries(drones).map(([id, drone]) => {
               if (!drone || (drone.latitude === 0 && drone.longitude === 0)) return null
@@ -532,7 +699,7 @@ export default function Dashboard() {
 
         {/* Right: Telemetry Cards (40%) */}
         <section className="w-[40%] bg-surface-container-lowest border-l border-outline-variant/20 p-3 flex flex-col gap-3 overflow-y-auto" style={{ minHeight: 0 }}>
-          {[1, 2, 3, 4, 5].map(id => (
+          {droneIds.map(id => (
             <DroneTelemetryCard
               key={id}
               droneId={id}
@@ -571,6 +738,16 @@ export default function Dashboard() {
         </div>
         <div ref={logsEndRef} />
       </footer>
+
+      <MissionPlanner
+        open={missionPlannerOpen}
+        waypoints={missionWaypoints}
+        onRemoveWaypoint={removeMissionWaypoint}
+        onClear={clearMissionWaypoints}
+        onClose={closeMissionPlanner}
+        onUploaded={handleMissionUploaded}
+        onLog={addLog}
+      />
     </div>
   )
 }
