@@ -1,9 +1,14 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Buffers.Binary;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
+using AeroSwarm.Api.Core;
 using AeroSwarm.Api.Data;
 using AeroSwarm.Api.Hubs;
 using AeroSwarm.Api.Models;
+using AeroSwarm.Api.Options;
+using AeroSwarm.Api.Services;
 
 namespace AeroSwarm.Api.Workers;
 
@@ -12,143 +17,137 @@ public class MavlinkWorker : BackgroundService
     private readonly ILogger<MavlinkWorker> _logger;
     private readonly IHubContext<DroneHub> _hubContext;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDroneStateService _stateService;
+    private readonly SwarmOptions _opts;
 
-    private readonly Dictionary<int, DroneTelemetry> _currentState = new();
     private readonly Dictionary<int, DateTime> _lastDbWrite = new();
+
+    public bool IsRunning { get; private set; }
+    public IPEndPoint? BoundEndpoint { get; private set; }
 
     public MavlinkWorker(
         ILogger<MavlinkWorker> logger,
         IHubContext<DroneHub> hubContext,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IDroneStateService stateService,
+        IOptions<SwarmOptions> opts)
     {
         _logger = logger;
         _hubContext = hubContext;
         _scopeFactory = scopeFactory;
+        _stateService = stateService;
+        _opts = opts.Value;
 
-        for (int i = 1; i <= 5; i++)
-        {
-            _currentState[i] = new DroneTelemetry { DroneId = i, Mode = "STABILIZE" };
-            _lastDbWrite[i] = DateTime.MinValue;
-        }
+        foreach (var id in _opts.DroneIds)
+            _lastDbWrite[id] = DateTime.MinValue;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("MAVLink Worker starting on UDP 0.0.0.0:14550");
+        var bindAddress = IPAddress.Parse(_opts.BindHost);
+        BoundEndpoint = new IPEndPoint(bindAddress, _opts.UdpPort);
+        _logger.LogInformation("MAVLink Worker starting on UDP {Endpoint}", BoundEndpoint);
 
-        using var udp = new UdpClient(new IPEndPoint(IPAddress.Any, 14550));
+        using var udp = new UdpClient(BoundEndpoint);
+        IsRunning = true;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 var result = await udp.ReceiveAsync(stoppingToken);
-                var data = result.Buffer;
-
-                // MAVLink v2: magic=0xFD, len, incompat, compat, seq, sysid, compid, msgid(3 bytes)
-                if (data.Length < 10 || data[0] != 0xFD)
-                    continue;
-
-                int payloadLen = data[1];
-                int droneId = data[5]; // system ID maps to drone 1–5
-
-                if (droneId < 1 || droneId > 5)
-                    continue;
-
-                uint msgId = (uint)(data[7] | (data[8] << 8) | (data[9] << 16));
-
-                if (!_currentState.TryGetValue(droneId, out var telemetry))
-                    continue;
-
-                const int headerLen = 10;
-
-                if (msgId == 0) // HEARTBEAT
-                {
-                    if (data.Length < headerLen + 9) continue;
-                    var payload = data.AsSpan(headerLen);
-                    uint customMode = BitConverter.ToUInt32(payload[0..4]);
-                    byte baseMode = payload[6];
-                    telemetry.IsArmed = (baseMode & 0x80) != 0;
-                    telemetry.Mode = customMode switch
-                    {
-                        0 => "STABILIZE",
-                        2 => "ALT_HOLD",
-                        3 => "AUTO",
-                        4 => "GUIDED",
-                        5 => "LOITER",
-                        6 => "RTL",
-                        9 => "LAND",
-                        _ => $"MODE_{customMode}"
-                    };
-                }
-                else if (msgId == 33) // GLOBAL_POSITION_INT
-                {
-                    if (data.Length < headerLen + 28) continue;
-                    var payload = data.AsSpan(headerLen);
-                    // MAVLink v2 wire layout:
-                    // [0-3]=time_boot_ms, [4-7]=lat(degE7), [8-11]=lon(degE7),
-                    // [12-15]=alt_msl(mm), [16-19]=relative_alt(mm),
-                    // [20-21]=vx(cm/s), [22-23]=vy(cm/s), [24-25]=vz, [26-27]=hdg(cdeg)
-                    int lat    = BitConverter.ToInt32(payload[4..8]);
-                    int lon    = BitConverter.ToInt32(payload[8..12]);
-                    int relAlt = BitConverter.ToInt32(payload[16..20]);
-                    short vx   = BitConverter.ToInt16(payload[20..22]);
-                    short vy   = BitConverter.ToInt16(payload[22..24]);
-                    ushort hdg = BitConverter.ToUInt16(payload[26..28]);
-
-                    telemetry.Latitude = lat / 1e7;
-                    telemetry.Longitude = lon / 1e7;
-                    telemetry.Altitude = relAlt / 1000.0f;
-                    telemetry.Speed = (float)Math.Sqrt(vx * vx + vy * vy) / 100.0f;
-                    telemetry.Heading = hdg / 100.0f;
-                }
-                else if (msgId == 147) // BATTERY_STATUS
-                {
-                    if (data.Length < headerLen + 36) continue;
-                    var payload = data.AsSpan(headerLen);
-                    ushort voltageRaw = BitConverter.ToUInt16(payload[10..12]);
-                    telemetry.BatteryVoltage = voltageRaw / 1000.0f;
-                    sbyte pct = (sbyte)payload[33];
-                    telemetry.BatteryPercent = pct < 0 ? 0 : pct;
-                }
-                else if (msgId == 24) // GPS_RAW_INT — satellites_visible at payload byte 29
-                {
-                    if (data.Length < headerLen + 30) continue;
-                    var payload = data.AsSpan(headerLen);
-                    telemetry.GpsSatellites = payload[29];
-                }
-                else if (msgId == 168) // WIND — direction (rad, bytes 0-3), speed m/s (bytes 4-7)
-                {
-                    if (data.Length < headerLen + 8) continue;
-                    var payload = data.AsSpan(headerLen);
-                    float dirRad = BitConverter.ToSingle(payload[0..4]);
-                    float speed  = BitConverter.ToSingle(payload[4..8]);
-                    telemetry.WindSpeed = speed;
-                    telemetry.WindDirectionDeg = dirRad * (180f / MathF.PI);
-                }
-
-                // Push live telemetry to all SignalR clients
-                await _hubContext.Clients.All.SendAsync("ReceiveTelemetry", telemetry, stoppingToken);
-
-                // Persist snapshot to DB every 5 seconds per drone
-                var now = DateTime.UtcNow;
-                if ((now - _lastDbWrite[droneId]).TotalSeconds >= 5)
-                {
-                    _lastDbWrite[droneId] = now;
-                    await PersistTelemetryAsync(telemetry, now);
-                }
+                await HandlePacketAsync(result.Buffer, result.RemoteEndPoint, stoppingToken);
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing MAVLink packet");
             }
         }
 
+        IsRunning = false;
         _logger.LogInformation("MAVLink Worker stopped");
+    }
+
+    private async Task HandlePacketAsync(byte[] data, IPEndPoint source, CancellationToken ct)
+    {
+        var msg = MavlinkV2.Decode(data);
+        if (msg is null) return;
+
+        int droneId = msg.SysId;
+        if (droneId < 1 || droneId > _opts.DroneCount) return;
+
+        bool changed = false;
+        _stateService.UpdateFromTelemetry(droneId, t =>
+        {
+            t.Ip = source.Address.ToString();
+            switch (msg.MsgId)
+            {
+                case MavlinkV2.MSG_HEARTBEAT:
+                    if (msg.Payload.Length >= 9)
+                    {
+                        uint customMode = BinaryPrimitives.ReadUInt32LittleEndian(msg.Payload.AsSpan(0, 4));
+                        byte baseMode = msg.Payload[6];
+                        t.IsArmed = (baseMode & 0x80) != 0;
+                        t.Mode = MapCustomModeToName(customMode);
+                        changed = true;
+                    }
+                    break;
+
+                case MavlinkV2.MSG_GLOBAL_POSITION_INT:
+                    if (msg.Payload.Length >= 28)
+                    {
+                        var p = msg.Payload.AsSpan();
+                        int lat = BinaryPrimitives.ReadInt32LittleEndian(p.Slice(4, 4));
+                        int lon = BinaryPrimitives.ReadInt32LittleEndian(p.Slice(8, 4));
+                        int relAlt = BinaryPrimitives.ReadInt32LittleEndian(p.Slice(16, 4));
+                        short vx = BinaryPrimitives.ReadInt16LittleEndian(p.Slice(20, 2));
+                        short vy = BinaryPrimitives.ReadInt16LittleEndian(p.Slice(22, 2));
+                        ushort hdg = BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(26, 2));
+
+                        t.Latitude = lat / 1e7;
+                        t.Longitude = lon / 1e7;
+                        t.Altitude = relAlt / 1000f;
+                        t.Speed = (float)Math.Sqrt(vx * vx + vy * vy) / 100f;
+                        t.Heading = hdg / 100f;
+                        t.LinkQuality = 100;
+                        changed = true;
+                    }
+                    break;
+
+                case MavlinkV2.MSG_BATTERY_STATUS:
+                    if (msg.Payload.Length >= 36)
+                    {
+                        var p = msg.Payload.AsSpan();
+                        ushort voltMv = BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(10, 2));
+                        t.BatteryVoltage = voltMv / 1000f;
+                        sbyte pct = (sbyte)p[33];
+                        t.BatteryPercent = pct < 0 ? 0 : pct;
+                        changed = true;
+                    }
+                    break;
+
+                case MavlinkV2.MSG_GPS_RAW_INT:
+                    if (msg.Payload.Length >= 30)
+                    {
+                        t.GpsSatellites = msg.Payload[29];
+                        changed = true;
+                    }
+                    break;
+            }
+        });
+
+        if (!changed) return;
+
+        var snapshot = _stateService.GetState(droneId);
+        await _hubContext.Clients.All.SendAsync("ReceiveTelemetry", snapshot, ct);
+
+        var now = DateTime.UtcNow;
+        if ((now - _lastDbWrite[droneId]).TotalSeconds >= _opts.TelemetryPersistIntervalSec)
+        {
+            _lastDbWrite[droneId] = now;
+            await PersistTelemetryAsync(snapshot, now);
+        }
     }
 
     private async Task PersistTelemetryAsync(DroneTelemetry t, DateTime recordedAt)
@@ -170,8 +169,6 @@ public class MavlinkWorker : BackgroundService
                 BatteryPercent = t.BatteryPercent,
                 BatteryVoltage = t.BatteryVoltage,
                 LinkQuality = t.LinkQuality,
-                GpsSatellites = t.GpsSatellites,
-                WindSpeed = t.WindSpeed,
                 RecordedAt = recordedAt
             });
             await db.SaveChangesAsync();
@@ -181,4 +178,16 @@ public class MavlinkWorker : BackgroundService
             _logger.LogError(ex, "Failed to persist telemetry for Drone #{DroneId}", t.DroneId);
         }
     }
+
+    private static string MapCustomModeToName(uint mode) => mode switch
+    {
+        0 => "STABILIZE",
+        2 => "ALT_HOLD",
+        3 => "AUTO",
+        4 => "GUIDED",
+        5 => "LOITER",
+        6 => "RTL",
+        9 => "LAND",
+        _ => $"MODE_{mode}",
+    };
 }

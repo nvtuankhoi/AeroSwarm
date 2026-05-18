@@ -13,7 +13,11 @@ public class DroneTelemetry
     public int BatteryPercent { get; set; }
     public float BatteryVoltage { get; set; }
     public int LinkQuality { get; set; }
-    public int GpsSatellites { get; set; }    // from GPS_RAW_INT (MSG_ID 24)
-    public float WindSpeed { get; set; }       // m/s from WIND (MSG_ID 168)
-    public float WindDirectionDeg { get; set; } // degrees from WIND (MSG_ID 168)
+    public int GpsSatellites { get; set; }     // GPS_RAW_INT (MSG_ID 24)
+    public float WindSpeed { get; set; }        // WIND (MSG_ID 168)
+    public float WindDirectionDeg { get; set; } // WIND (MSG_ID 168)
+
+    public DateTime LastSeen { get; set; } = DateTime.MinValue;
+    public bool IsOnline { get; set; }
+    public string Ip { get; set; } = string.Empty;
 }

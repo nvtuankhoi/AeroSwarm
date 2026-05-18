@@ -9,6 +9,8 @@ public class AppDbContext : DbContext
 
     public DbSet<TelemetryHistory> TelemetryHistory => Set<TelemetryHistory>();
     public DbSet<DroneEvent> DroneEvents => Set<DroneEvent>();
+    public DbSet<Flight> Flights => Set<Flight>();
+    public DbSet<Waypoint> Waypoints => Set<Waypoint>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -17,5 +19,14 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<DroneEvent>()
             .HasIndex(e => new { e.DroneId, e.OccurredAt });
+
+        modelBuilder.Entity<Waypoint>()
+            .HasOne(w => w.Flight)
+            .WithMany(f => f.Waypoints)
+            .HasForeignKey(w => w.FlightId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Waypoint>()
+            .HasIndex(w => new { w.FlightId, w.DroneId, w.Sequence });
     }
 }
