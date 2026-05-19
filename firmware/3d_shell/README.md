@@ -1,6 +1,21 @@
-# AeroSwarm Demo Drone Shell — 3D printable
+# AeroSwarm Demo Drone Shell — 3D printable (v2 optimized)
 
 Parametric OpenSCAD model fits all hardware of the demo drone into an X-frame quadcopter shape ~270mm tip-to-tip.
+
+## v2 optimizations
+
+| # | Optimization | Why |
+|---|---|---|
+| 1 | **WiFi antenna clearance slot** in lid above ESP32 PCB antenna | Plastic body wall attenuates 2.4GHz signal — we hit this issue during bench tests. Slot keeps RF unobstructed. |
+| 2 | **SysID number emboss** on lid top (1-5) | Distinguish 5 identical drones at a glance |
+| 3 | **Arm reinforcement gussets** (right-triangle fillets at arm root) | Prevent arm snap-off during handling |
+| 4 | **Cable channel** along arm top | Clean motor wire routing into body |
+| 5 | **Anti-skid feet recesses** (4× Φ6mm) at bottom | Stick silicone bumpers — drone doesn't slide |
+| 6 | **TIP120 cooling vents** (6 slots on bottom) | Passive airflow for transistor heat dissipation |
+| 7 | **Prop guards** (optional, set `include_prop_guards = true`) | Rings prevent prop breakage if drone tips |
+| 8 | **"AeroSwarm" logo emboss** on front-side wall (optional, `include_logo`) | Branding |
+
+Disable any feature by setting its boolean parameter to `false`.
 
 ## Quick start
 
@@ -52,16 +67,38 @@ Total: ~4-5h, ~33g PLA. Print as 1 plate or split into 2 jobs.
 Edit the **PARAMETERS** block at the top of `aeroswarm_demo_drone.scad`:
 
 ```scad
-body_w = 80;          // increase if 134N3P or battery longer than expected
-pwr_w = 42;           // ← MEASURE your 134N3P width with calipers
-pwr_d = 26;           // ← MEASURE depth
-pwr_h = 10;           // ← MEASURE thickness
-batt_w = 22;          // Li-Po 502030 width tolerance
-batt_d = 32;          // length
-motor_dia = 7.2;      // 7.0 motor + 0.2 clearance
+sysid = 2;                      // change 1-5 → emboss different number on each lid
+include_prop_guards = false;    // true if you want safety rings around props
+include_logo = true;            // "AeroSwarm" emboss on front side
+body_w = 80;                    // increase if 134N3P or battery longer
+pwr_w = 42;                     // ← MEASURE your 134N3P width with calipers
+pwr_d = 26;                     // ← MEASURE depth
+batt_w = 22;                    // Li-Po 502030 width tolerance
+batt_d = 32;                    // length
+motor_dia = 7.2;                // 7.0 motor + 0.2 clearance
 ```
 
 Press F5 to preview after each tweak.
+
+## Print 5 drones with unique SysID
+
+For each board, change `sysid = 1` through `sysid = 5` and re-export the lid.
+Bottom shell is identical for all 5 (you can print 5× same STL).
+
+Quick batch workflow:
+```
+sysid = 1 → F6 → export lid_1.stl
+sysid = 2 → F6 → export lid_2.stl
+... etc
+```
+
+Or use OpenSCAD CLI:
+```bash
+for i in 1 2 3 4 5; do
+    openscad -D "sysid=$i" -o lid_$i.stl --export-format binstl \
+             -D "render_target=\"lid\"" aeroswarm_demo_drone.scad
+done
+```
 
 ## Assembly order
 
