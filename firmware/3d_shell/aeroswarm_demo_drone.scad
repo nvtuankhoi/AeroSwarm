@@ -95,6 +95,23 @@ module gusset(size) {
             polygon([[0,0], [size, 0], [0, size]]);
 }
 
+// Label emboss on interior surface (raised text)
+module label(x, y, z, txt, sz, rot = 0) {
+    translate([x, y, z])
+        rotate([0, 0, rot])
+            linear_extrude(0.6)
+                text(txt, size=sz, halign="center", valign="center",
+                     font="Arial:style=Bold");
+}
+
+// Arrow pointing toward USB-C (drone "rear")
+module arrow_marker(x, y, z, rot = 0) {
+    translate([x, y, z])
+        rotate([0, 0, rot])
+            linear_extrude(0.6)
+                polygon([[-3, -2], [3, 0], [-3, 2], [-1, 0]]);
+}
+
 // ── BOTTOM SHELL ─────────────────────────────────────────────────────────
 module body_bottom_with_arms() {
     difference() {
@@ -125,9 +142,34 @@ module body_bottom_with_arms() {
                 }
             }
 
-            // Cradles inside (low walls, hot-glue components in)
-            cradle(-15, 0, wall, batt_w + 2, batt_d + 2, 4);
-            cradle(15, 0, wall, pwr_w + 2, pwr_d + 2, 4);
+            // Layout — 2 tiers stacked at REAR (+X side, USB cutouts here):
+            //   TOP TIER (~z=14-20): ESP32 with USB-C pointing +X (rear)
+            //   BOT TIER (~z=2-12): 134N3P with Micro-USB pointing +X (rear)
+            //   FRONT (-X side): battery in cradle, swappable
+            //
+            // ESP32 cradle (top tier, +X side near rear wall, length along X)
+            translate([0, 8, bottom_h - 9])
+                difference() {
+                    cube([28, 22, 5], center=true);
+                    translate([0, 0, 1.5])
+                        cube([24, 20, 5], center=true);
+                }
+            // 134N3P cradle (bottom tier, +X side near rear wall)
+            cradle(8, -8, wall, pwr_w + 2, pwr_d + 2, 4);
+            // Battery cradle (FRONT, -X side, free-swap zone)
+            cradle(-22, 0, wall, batt_w + 2, batt_d + 2, 4);
+
+            // Interior labels — guide assembly
+            label(-22,  0,  wall + 0.01, "BATT",     3.5);                // battery position
+            label(-22,  10, wall + 0.01, "JST→",     2.2);                // points right (toward 134N3P)
+            label(  8, -8,  wall + 0.01, "134N3P",   3);                  // power module
+            label(  8, -20, wall + 0.01, "μUSB→",   2.2);                 // micro-USB exits +X
+            label(  0,  8,  bottom_h - 9 + 2.7, "ESP32",   3);            // ESP32 cradle (top of shell)
+            label(  0,  20, bottom_h - 9 + 2.7, "USB-C→", 2.2);           // USB-C exits +X
+            label(-22, -20, wall + 0.01, "TIP×2",  2.5);                  // TIP120 area (front-right)
+            // Arrows pointing toward rear cutouts (+X)
+            arrow_marker(35, 8,  wall + 0.01, 0);   // points +X
+            arrow_marker(35, -8, wall + 0.01, 0);
         }
 
         // ── Subtractive cutouts ──────────────────────────────────────────
@@ -136,13 +178,13 @@ module body_bottom_with_arms() {
             rbox(body_w - 2*wall, body_d - 2*wall,
                  bottom_h - wall + 0.01, corner_r - 1);
 
-        // USB-C port cutout (drone rear, +X)
-        translate([body_w/2 - wall, 0, bottom_h - 8])
-            cube([wall*2 + 0.5, usb_c_w, usb_c_h + 2], center=true);
+        // USB-C cutout — REAR wall (+X), upper half (aligns with ESP32 top tier)
+        translate([body_w/2, 8, bottom_h - 7])
+            cube([wall*2 + 1, usb_c_w + 1, usb_c_h + 2], center=true);
 
-        // Micro-USB cutout (drone side +Y, for 134N3P)
-        translate([5, body_d/2 - wall, 6])
-            cube([micro_usb_w, wall*2 + 0.5, micro_usb_h + 2], center=true);
+        // Micro-USB cutout — SAME REAR wall (+X), lower half (134N3P bottom tier)
+        translate([body_w/2, -8, 7])
+            cube([wall*2 + 1, micro_usb_w + 1, micro_usb_h + 2], center=true);
 
         // Lid alignment peg sockets (4 corners)
         for (x = [-body_w/2 + corner_r + 2, body_w/2 - corner_r - 2])
@@ -259,6 +301,13 @@ module lid() {
         for (y = [-body_d/2 + corner_r + 2, body_d/2 - corner_r - 2])
             translate([x, y, 0])
                 cylinder(d=peg_dia, h=peg_h);
+
+    // Inside-lid labels (visible when lid is flipped over, helps assembly)
+    label( 0,    9, wall - 0.01, "RGB",   3, 180);             // mirror text — inside surface
+    label( buzzer_x, buzzer_y - 9, wall - 0.01, "BUZZ", 2.8, 180);
+    label( 22, -16, wall - 0.01, "BOOT", 2.5, 180);
+    label( wifi_slot_x, wifi_slot_y + 4, wall - 0.01, "WiFi", 2.5, 180);
+    label( 0, -body_d/2 + 5, wall - 0.01, "FRONT", 3, 180);
 }
 
 // ── PRINT LAYOUTS ────────────────────────────────────────────────────────
@@ -274,8 +323,13 @@ module assembled() {
         lid();
 }
 
-// ── RENDER (uncomment one) ───────────────────────────────────────────────
-print_layout();
-// assembled();
-// body_bottom_with_arms();
-// lid();
+// ── RENDER ────────────────────────────────────────────────────────────────
+// CLI: openscad -o output.stl -D 'render_target="bottom"' -D 'sysid=2' file.scad
+// Targets: "layout" | "bottom" | "lid" | "assembled"
+render_target = "layout";
+
+if      (render_target == "layout")    print_layout();
+else if (render_target == "bottom")    body_bottom_with_arms();
+else if (render_target == "lid")       lid();
+else if (render_target == "assembled") assembled();
+else                                    print_layout();

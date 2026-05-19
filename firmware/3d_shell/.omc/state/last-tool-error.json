@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"git add firmware/3d_shell/ && git commit -m \\\"$(cat <<'EOF'\\nfeat(3d): generate STL artifacts + interior assembly labels\\n\\nOpenSCAD renders 6 STLs ready for slicer:\\n- bottom.stl (519KB, ...",
+  "error": "Exit code 128\nwarning: could not open directory 'firmware/3d_shell/firmware/3d_shell/': No such file or directory\nfatal: pathspec 'firmware/3d_shell/' did not match any files",
+  "timestamp": "2026-05-19T15:28:09.156Z",
+  "retry_count": 1
+}
