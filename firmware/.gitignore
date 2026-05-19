@@ -6,3 +6,4 @@
 .vscode/launch.json
 .vscode/ipch
 *.user
+secrets_local.h

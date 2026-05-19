@@ -18,11 +18,18 @@
 #include <ArduinoOTA.h>
 #include <Preferences.h>
 #include <WiFiManager.h>
+#include <esp_wifi.h>
 #include <math.h>
 
 #include "config.h"
 #include "mavlink.h"
 #include "peripherals.h"
+
+// Optional: local override of captive portal with hardcoded creds for testing.
+// File is gitignored. Define WIFI_SSID + WIFI_PASS to skip WiFiManager.
+#if __has_include("secrets_local.h")
+#include "secrets_local.h"
+#endif
 
 using peripherals::FsmState;
 using peripherals::BattWarn;
@@ -211,6 +218,42 @@ void loop() {
 
 // ── WiFi + OTA ────────────────────────────────────────────────────────
 static void connectWifi() {
+#if defined(WIFI_SSID) && defined(WIFI_PASS)
+    // Hardcoded test mode (secrets_local.h present) — skip captive portal.
+    Serial.printf("[WIFI] connecting to '%s' (hardcoded)\n", WIFI_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.setMinSecurity(WIFI_AUTH_WEP);
+    // VN region (scan ch 1-13)
+    wifi_country_t country = { .cc = "VN", .schan = 1, .nchan = 13,
+                                .max_tx_power = 78, .policy = WIFI_COUNTRY_POLICY_MANUAL };
+    esp_wifi_set_country(&country);
+    // ESP32-C3 Super Mini PCB antenna fix: lower TX power + disable modem sleep.
+    // At default 19.5 dBm, RF mismatch causes WPA handshake fail with AUTH_EXPIRE.
+    WiFi.setSleep(false);
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    WiFi.persistent(false);
+    WiFi.disconnect(true, true);
+    delay(500);
+    // Warmup RF with a scan (improves first-connect reliability on C3 Super Mini)
+    Serial.println("[WIFI] RF warmup scan...");
+    int n = WiFi.scanNetworks(false, true);
+    Serial.printf("[WIFI] scan saw %d networks\n", n);
+    WiFi.scanDelete();
+    delay(200);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    uint32_t start = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - start) < 20000) {
+        delay(300);
+        Serial.print(".");
+    }
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.printf("[WIFI] connected IP=%s RSSI=%d\n",
+                      WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    } else {
+        Serial.println("[WIFI] connect failed (check SSID/pass), continuing offline");
+    }
+#else
     char apName[32];
     snprintf(apName, sizeof(apName), "AeroSwarm-Setup-%d", g_sysId);
     g_wm.setConfigPortalTimeout(180);
@@ -221,6 +264,7 @@ static void connectWifi() {
     } else {
         Serial.println("[WIFI] portal timed out, continuing offline");
     }
+#endif
 }
 
 static void setupOta() {
