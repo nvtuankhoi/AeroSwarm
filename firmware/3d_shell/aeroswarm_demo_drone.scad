@@ -253,12 +253,7 @@ module lid() {
         translate([wifi_slot_x, wifi_slot_y, -0.1])
             cube([wifi_slot_w, wifi_slot_d, lid_h + 0.2], center=true);
 
-        // SysID number — RECESSED into lid top so it can be color-filled
-        // (print bottom-up: at last 1.5mm switch filament color, fills recess)
-        translate([0, -body_d/2 + 18, lid_h - 1.5])
-            linear_extrude(1.6)   // 1.5mm deep recess + 0.1mm cut-through margin
-                text(str(sysid), size=14, halign="center", valign="center",
-                     font="Arial:style=Bold");
+
 
         // AeroSwarm logo (front-side wall outer face) — keep recessed too
         if (include_logo) {
