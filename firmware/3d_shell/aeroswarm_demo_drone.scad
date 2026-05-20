@@ -88,11 +88,13 @@ module cradle(cx, cy, z, w, d, h) {
         }
 }
 
-// Right-triangle gusset between arm root and body wall
+// Right-triangle gusset between arm root and body wall.
+// Sits on bed (z=0) so it prints supportless.
 module gusset(size) {
-    rotate([90, 0, 0])
-        linear_extrude(height = arm_w, center = true)
-            polygon([[0,0], [size, 0], [0, size]]);
+    translate([0, 0, 0])
+        rotate([90, 0, 0])
+            linear_extrude(height = arm_w, center = true)
+                polygon([[0, 0], [size, 0], [0, size]]);
 }
 
 // Label emboss on interior surface (raised text)
@@ -120,16 +122,17 @@ module body_bottom_with_arms() {
             rbox(body_w, body_d, bottom_h, corner_r);
 
             // Reinforcement gussets at the 4 arm roots (X-frame corners)
+            // Arms sit at z=0 (touch bed during print — no overhang, no supports)
             for (a = [arm_angle, arm_angle + 90, arm_angle + 180, arm_angle + 270]) {
                 rotate([0, 0, a])
-                    translate([body_w * sqrt(2)/2 - 6, 0, bottom_h/2 - arm_h/2])
+                    translate([body_w * sqrt(2)/2 - 6, 0, 0])
                         gusset(gusset_size);
             }
 
-            // 4 arms at X corners
+            // 4 arms at X corners, FLAT ON BED (z = 0 to arm_h)
             for (a = [arm_angle, arm_angle + 90, arm_angle + 180, arm_angle + 270]) {
                 rotate([0, 0, a])
-                    translate([body_w * sqrt(2)/2 - 4, 0, bottom_h/2 - arm_h/2])
+                    translate([body_w * sqrt(2)/2 - 4, 0, 0])
                         arm_with_motor_mount();
             }
 
@@ -137,39 +140,11 @@ module body_bottom_with_arms() {
             if (include_prop_guards) {
                 for (a = [arm_angle, arm_angle + 90, arm_angle + 180, arm_angle + 270]) {
                     rotate([0, 0, a])
-                        translate([body_w * sqrt(2)/2 - 4 + arm_len, 0, bottom_h/2 - arm_h/2])
+                        translate([body_w * sqrt(2)/2 - 4 + arm_len, 0, 0])
                             prop_guard();
                 }
             }
 
-            // Layout — 2 tiers stacked at REAR (+X side, USB cutouts here):
-            //   TOP TIER (~z=14-20): ESP32 with USB-C pointing +X (rear)
-            //   BOT TIER (~z=2-12): 134N3P with Micro-USB pointing +X (rear)
-            //   FRONT (-X side): battery in cradle, swappable
-            //
-            // ESP32 cradle (top tier, +X side near rear wall, length along X)
-            translate([0, 8, bottom_h - 9])
-                difference() {
-                    cube([28, 22, 5], center=true);
-                    translate([0, 0, 1.5])
-                        cube([24, 20, 5], center=true);
-                }
-            // 134N3P cradle (bottom tier, +X side near rear wall)
-            cradle(8, -8, wall, pwr_w + 2, pwr_d + 2, 4);
-            // Battery cradle (FRONT, -X side, free-swap zone)
-            cradle(-22, 0, wall, batt_w + 2, batt_d + 2, 4);
-
-            // Interior labels — guide assembly
-            label(-22,  0,  wall + 0.01, "BATT",     3.5);                // battery position
-            label(-22,  10, wall + 0.01, "JST→",     2.2);                // points right (toward 134N3P)
-            label(  8, -8,  wall + 0.01, "134N3P",   3);                  // power module
-            label(  8, -20, wall + 0.01, "μUSB→",   2.2);                 // micro-USB exits +X
-            label(  0,  8,  bottom_h - 9 + 2.7, "ESP32",   3);            // ESP32 cradle (top of shell)
-            label(  0,  20, bottom_h - 9 + 2.7, "USB-C→", 2.2);           // USB-C exits +X
-            label(-22, -20, wall + 0.01, "TIP×2",  2.5);                  // TIP120 area (front-right)
-            // Arrows pointing toward rear cutouts (+X)
-            arrow_marker(35, 8,  wall + 0.01, 0);   // points +X
-            arrow_marker(35, -8, wall + 0.01, 0);
         }
 
         // ── Subtractive cutouts ──────────────────────────────────────────
@@ -204,22 +179,45 @@ module body_bottom_with_arms() {
                        0, -0.01])
                 cube([vent_w, vent_h, wall + 0.1], center=true);
     }
+
+    // ── ADDITIVE INTERIOR FEATURES (placed AFTER hollow subtraction) ─────
+    // Layout — 2 tiers stacked at REAR (+X side, USB cutouts here):
+    //   TOP TIER (~z=14-20): ESP32 with USB-C pointing +X (rear)
+    //   BOT TIER (~z=2-12): 134N3P with Micro-USB pointing +X (rear)
+    //   FRONT (-X side): battery in cradle, swappable
+
+    // ESP32 cradle (top tier, near rear +X wall, length along X)
+    translate([5, 8, bottom_h - 7])
+        difference() {
+            cube([28, 22, 5], center=true);
+            translate([0, 0, 1.5])
+                cube([24, 20, 5], center=true);
+        }
+    // 134N3P cradle (bottom tier, rear side, length along X)
+    cradle(8, -8, wall, pwr_w + 2, pwr_d + 2, 4);
+    // Battery cradle (FRONT, -X side, swap-friendly)
+    cradle(-22, 0, wall, batt_w + 2, batt_d + 2, 4);
+
+    // Interior labels — raised text guides where each part goes
+    label(-22,  -16, wall + 0.01, "BATT",   3.5);
+    label( 8,  -8,  wall + 0.01, "134N3P", 3);
+    label( 8,  -22, wall + 0.01, "uUSB->", 2.5);
+    label( 5,   8,  bottom_h - 7 + 2.7, "ESP32",   3);
+    label( 5,   20, bottom_h - 7 + 2.7, "USBC->",  2.5);
+    label(-22, 20,  wall + 0.01, "TIPx2",  2.8);
+
+    // Arrows pointing toward rear cutouts (+X)
+    arrow_marker(33, 8,  wall + 0.01, 0);
+    arrow_marker(33, -8, wall + 0.01, 0);
 }
 
 module arm_with_motor_mount() {
     union() {
-        // Arm bar
+        // Arm bar — sits from z=0 to z=arm_h (flat on bed for printing)
         translate([arm_len/2, 0, arm_h/2])
             cube([arm_len, arm_w, arm_h], center=true);
 
-        // Cable channel along arm top (groove for motor wires)
-        translate([arm_len/2, 0, arm_h - 1.2])
-            difference() {
-                cube([arm_len - 4, arm_w - 2, 0.01], center=true);
-                cube([arm_len - 6, arm_w - 4, 0.02], center=true);
-            }
-
-        // Motor mount collar at arm tip
+        // Motor mount collar at arm tip (rises vertically from arm top)
         translate([arm_len, 0, 0])
             difference() {
                 cylinder(d=motor_collar, h=motor_depth);
@@ -281,17 +279,18 @@ module lid() {
         translate([wifi_slot_x, wifi_slot_y, -0.1])
             cube([wifi_slot_w, wifi_slot_d, lid_h + 0.2], center=true);
 
-        // SysID emboss on top (raised text 1..5)
-        translate([0, -body_d/2 + 18, lid_h - emboss_h])
-            linear_extrude(emboss_h + 0.1)
-                text(str(sysid), size=10, halign="center", valign="center",
+        // SysID number — RECESSED into lid top so it can be color-filled
+        // (print bottom-up: at last 1.5mm switch filament color, fills recess)
+        translate([0, -body_d/2 + 18, lid_h - 1.5])
+            linear_extrude(1.6)   // 1.5mm deep recess + 0.1mm cut-through margin
+                text(str(sysid), size=14, halign="center", valign="center",
                      font="Arial:style=Bold");
 
-        // AeroSwarm logo (front-side wall outer face)
+        // AeroSwarm logo (front-side wall outer face) — keep recessed too
         if (include_logo) {
-            translate([0, -body_d/2 + 0.1, lid_h/2])
+            translate([0, -body_d/2 + 0.6, lid_h/2])
                 rotate([90, 0, 0])
-                    linear_extrude(emboss_h + 0.1)
+                    linear_extrude(0.7)
                         text("AeroSwarm", size=4, halign="center", valign="center");
         }
     }
@@ -313,8 +312,13 @@ module lid() {
 // ── PRINT LAYOUTS ────────────────────────────────────────────────────────
 module print_layout() {
     body_bottom_with_arms();
-    translate([body_w + 80, 0, 0])
-        lid();
+    // Lid flipped upside-down for printing:
+    //  - text-recess sits on bed (first layer = color A → fills SysID number)
+    //  - alignment pegs face UP (vertical cylinders, no overhang)
+    //  - flat lid top becomes the build-plate-facing surface (clean finish)
+    translate([body_w + 80, 0, lid_h])
+        rotate([180, 0, 0])
+            lid();
 }
 
 module assembled() {
@@ -330,6 +334,12 @@ render_target = "layout";
 
 if      (render_target == "layout")    print_layout();
 else if (render_target == "bottom")    body_bottom_with_arms();
-else if (render_target == "lid")       lid();
+else if (render_target == "lid")
+    // Output lid in print-ready orientation (upside-down):
+    // text-recess on bed for color change, pegs face up (no overhang)
+    translate([0, 0, lid_h])
+        rotate([180, 0, 0])
+            lid();
+else if (render_target == "lid_upright") lid();   // for visual / fit-check only
 else if (render_target == "assembled") assembled();
 else                                    print_layout();
