@@ -161,11 +161,7 @@ module body_bottom_with_arms() {
         translate([body_w/2, -8, 7])
             cube([wall*2 + 1, micro_usb_w + 1, micro_usb_h + 2], center=true);
 
-        // Lid alignment peg sockets (4 corners)
-        for (x = [-body_w/2 + corner_r + 2, body_w/2 - corner_r - 2])
-            for (y = [-body_d/2 + corner_r + 2, body_d/2 - corner_r - 2])
-                translate([x, y, bottom_h - peg_h])
-                    cylinder(d=peg_dia + 0.4, h=peg_h + 0.01);
+
 
         // Anti-skid feet recesses (bottom of shell)
         for (x = [-body_w/2 + foot_offset, body_w/2 - foot_offset])
@@ -186,29 +182,7 @@ module body_bottom_with_arms() {
     //   BOT TIER (~z=2-12): 134N3P with Micro-USB pointing +X (rear)
     //   FRONT (-X side): battery in cradle, swappable
 
-    // ESP32 cradle (top tier, near rear +X wall, length along X)
-    translate([5, 8, bottom_h - 7])
-        difference() {
-            cube([28, 22, 5], center=true);
-            translate([0, 0, 1.5])
-                cube([24, 20, 5], center=true);
-        }
-    // 134N3P cradle (bottom tier, rear side, length along X)
-    cradle(8, -8, wall, pwr_w + 2, pwr_d + 2, 4);
-    // Battery cradle (FRONT, -X side, swap-friendly)
-    cradle(-22, 0, wall, batt_w + 2, batt_d + 2, 4);
 
-    // Interior labels — raised text guides where each part goes
-    label(-22,  -16, wall + 0.01, "BATT",   3.5);
-    label( 8,  -8,  wall + 0.01, "134N3P", 3);
-    label( 8,  -22, wall + 0.01, "uUSB->", 2.5);
-    label( 5,   8,  bottom_h - 7 + 2.7, "ESP32",   3);
-    label( 5,   20, bottom_h - 7 + 2.7, "USBC->",  2.5);
-    label(-22, 20,  wall + 0.01, "TIPx2",  2.8);
-
-    // Arrows pointing toward rear cutouts (+X)
-    arrow_marker(33, 8,  wall + 0.01, 0);
-    arrow_marker(33, -8, wall + 0.01, 0);
 }
 
 module arm_with_motor_mount() {
@@ -295,18 +269,7 @@ module lid() {
         }
     }
 
-    // Alignment pegs (underneath corners)
-    for (x = [-body_w/2 + corner_r + 2, body_w/2 - corner_r - 2])
-        for (y = [-body_d/2 + corner_r + 2, body_d/2 - corner_r - 2])
-            translate([x, y, 0])
-                cylinder(d=peg_dia, h=peg_h);
 
-    // Inside-lid labels (visible when lid is flipped over, helps assembly)
-    label( 0,    9, wall - 0.01, "RGB",   3, 180);             // mirror text — inside surface
-    label( buzzer_x, buzzer_y - 9, wall - 0.01, "BUZZ", 2.8, 180);
-    label( 22, -16, wall - 0.01, "BOOT", 2.5, 180);
-    label( wifi_slot_x, wifi_slot_y + 4, wall - 0.01, "WiFi", 2.5, 180);
-    label( 0, -body_d/2 + 5, wall - 0.01, "FRONT", 3, 180);
 }
 
 // ── PRINT LAYOUTS ────────────────────────────────────────────────────────
