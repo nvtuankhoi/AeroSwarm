@@ -178,17 +178,12 @@ void loop() {
         gpsTick(dt);
     }
 
-    // Battery sampling
-    static uint32_t lastBattRead = 0;
-    if (now - lastBattRead >= 100) {
-        lastBattRead = now;
-        batteryTick();
-    }
+    // Battery monitor REMOVED — no divider hardware, no telemetry, no failsafe
+    // (user opted to skip battery percentage entirely)
 
     // Telemetry TX
     if (now - g_lastHbTx >= HEARTBEAT_TX_MS) { g_lastHbTx = now; txHeartbeat(); }
     if (now - g_lastPosTx >= POSITION_TX_MS) { g_lastPosTx = now; txGlobalPosition(); }
-    if (now - g_lastBattTx >= BATTERY_TX_MS) { g_lastBattTx = now; txBatteryStatus(); }
 
     // WiFi reconnect
     if (WiFi.status() != WL_CONNECTED) {
@@ -524,12 +519,7 @@ static void fsmTick() {
         default: break;
     }
 
-    // Critical battery → force RTL/land
-    if (g_battWarn == BattWarn::CRITICAL &&
-        (g_state == FsmState::FLYING || g_state == FsmState::TAKEOFF)) {
-        changeState(FsmState::RTL, "battery critical");
-        txStatusText(2, "Critical battery, RTL");
-    }
+    // Battery failsafe REMOVED — no battery monitoring in this build
 }
 
 // ── Virtual GPS ───────────────────────────────────────────────────────
