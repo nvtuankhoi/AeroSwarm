@@ -118,13 +118,13 @@ public class MavlinkWorker : BackgroundService
             // Ignore GCS heartbeats (our own HeartbeatSender) so stream requests go to the real drone.
             bool fromGcs = msg.SysId == MavlinkV2.GcsSysId;
             bool changed = false;
+            // Ignore GCS heartbeats entirely — they should not overwrite real drone state.
+            if (fromGcs) continue;
+
             _stateService.UpdateFromTelemetry(droneId, t =>
             {
                 t.Ip = source.Address.ToString();
-                if (!fromGcs)
-                {
-                    t.RemotePort = source.Port;
-                }
+                t.RemotePort = source.Port;
                 switch (msg.MsgId)
                 {
                     case MavlinkV2.MSG_HEARTBEAT:
@@ -135,12 +135,9 @@ public class MavlinkWorker : BackgroundService
                             t.IsArmed = (baseMode & 0x80) != 0;
                             t.Mode = MapCustomModeToName(customMode);
                             changed = true;
-                            if (!fromGcs)
+                            lock (_streamRequestsSent)
                             {
-                                lock (_streamRequestsSent)
-                                {
-                                    isFirstHeartbeat = _streamRequestsSent.Add(droneId);
-                                }
+                                isFirstHeartbeat = _streamRequestsSent.Add(droneId);
                             }
                         }
                         break;

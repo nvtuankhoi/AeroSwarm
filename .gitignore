@@ -29,3 +29,12 @@ Thumbs.db
 # OMC state & backups
 .omc/
 *.bak
+
+# ArduPilot SITL artifacts
+eeprom.bin
+terrain/
+logs/
+*.tlog
+*.bin
+sitl/.bin/
+sitl/__pycache__/

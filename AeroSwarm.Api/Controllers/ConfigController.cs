@@ -21,6 +21,7 @@ public class ConfigController : ControllerBase
         DroneCount = _opts.DroneCount,
         DroneIds = _opts.DroneIds.ToArray(),
         UdpPort = _opts.UdpPort,
+        UdpPorts = _opts.UdpPorts.ToArray(),
         DropoutThresholdSec = _opts.DropoutThresholdSec,
         LowVoltage = _opts.LowVoltagePerCell * _opts.LiPoCellCount,
         CriticalVoltage = _opts.CriticalVoltagePerCell * _opts.LiPoCellCount,

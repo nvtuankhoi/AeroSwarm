@@ -44,7 +44,8 @@ public class HeartbeatSender : BackgroundService
                 }
                 try
                 {
-                    var endpoint = new IPEndPoint(IPAddress.Parse(ip), _opts.UdpPort);
+                    var port = _opts.GetPort(id);
+                    var endpoint = new IPEndPoint(IPAddress.Parse(ip), port);
                     await udp.SendAsync(frame, frame.Length, endpoint);
                 }
                 catch (Exception ex)
