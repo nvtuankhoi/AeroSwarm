@@ -64,10 +64,11 @@ public class DroneCommandController : ControllerBase
     public async Task<IActionResult> Rtl(int droneId)
     {
         if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
-        // SET_MODE customMode=6 (RTL) — keeps backward compat with existing firmware mapping
-        var frame = MavlinkV2.EncodeSetMode((byte)droneId, baseMode: 1, customMode: 6);
+        // Send MAV_CMD_NAV_RETURN_TO_LAUNCH — works for both ArduPilot SITL and custom firmware
+        var frame = MavlinkV2.EncodeCommandLong((byte)droneId, MavlinkV2.AutopilotCompId,
+            MavlinkV2.CMD_NAV_RETURN_TO_LAUNCH);
         await SendAsync(ip, port, frame);
-        await LogAndBroadcast(droneId, "CMD", $"Sent SET_MODE RTL to Drone #{droneId}.");
+        await LogAndBroadcast(droneId, "CMD", $"Sent NAV_RETURN_TO_LAUNCH to Drone #{droneId}.");
         return Ok(new { message = $"RTL command sent to drone {droneId}" });
     }
 

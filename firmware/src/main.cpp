@@ -331,6 +331,11 @@ static void onCommandLong(const mavlink::Decoded& m, IPAddress src) {
             break;
 
         case mavlink::CMD_NAV_RETURN_TO_LAUNCH:
+            if (!g_homeSet) {
+                g_homeLat = g_lat; g_homeLon = g_lon; g_homeAlt = g_alt;
+                g_homeSet = true;
+                txStatusText(6, "Home auto-set for RTL");
+            }
             changeState(FsmState::RTL, "rtl cmd");
             txCommandAck(c.command, 0);
             peripherals::buzzerPlay(BuzzerPattern::RTL_START);
@@ -374,7 +379,15 @@ static void onSetMode(const mavlink::Decoded& m) {
     if (sm.targetSys != g_sysId) return;
     Serial.printf("[MAV] SET_MODE custom=%u\n", sm.customMode);
     switch (sm.customMode) {
-        case 6: changeState(FsmState::RTL, "set_mode rtl"); peripherals::buzzerPlay(BuzzerPattern::RTL_START); break;
+        case 6:
+            if (!g_homeSet) {
+                g_homeLat = g_lat; g_homeLon = g_lon; g_homeAlt = g_alt;
+                g_homeSet = true;
+                txStatusText(6, "Home auto-set for RTL");
+            }
+            changeState(FsmState::RTL, "set_mode rtl");
+            peripherals::buzzerPlay(BuzzerPattern::RTL_START);
+            break;
         case 9: changeState(FsmState::LANDING, "set_mode land"); break;
         case 4: /* GUIDED — stay in current state but armed */ break;
         default: break;
@@ -439,6 +452,10 @@ static void onNamedValueFloat(const mavlink::Decoded& m) {
         g_syncState = (FsmState)(int)p.value;
     } else if (strcmp(name, "AS_ALT") == 0) {
         g_syncAlt = p.value;
+    } else if (strcmp(name, "AS_LAT") == 0) {
+        g_lat = p.value;
+    } else if (strcmp(name, "AS_LON") == 0) {
+        g_lon = p.value;
     } else {
         return; // unknown name
     }
@@ -471,9 +488,21 @@ static void onNamedValueFloat(const mavlink::Decoded& m) {
 }
 
 // ── State machine ─────────────────────────────────────────────────────
+static bool isFlightState(FsmState s) {
+    return s == FsmState::TAKEOFF || s == FsmState::FLYING ||
+           s == FsmState::RTL     || s == FsmState::LANDING;
+}
+
 static void changeState(FsmState s, const char* reason) {
     if (s == g_state) return;
-    g_currentMotorThrottle = 0; // reset soft-start ramp on any state transition
+    // Only reset motor throttle when transitioning between ground and flight.
+    // Staying within flight states (TAKEOFF→FLYING→RTL→LANDING) keeps ramp
+    // to avoid brown-out from current spikes.
+    bool wasFlying = isFlightState(g_state);
+    bool nowFlying = isFlightState(s);
+    if (wasFlying != nowFlying) {
+        g_currentMotorThrottle = 0;
+    }
     const char* names[] = {"BOOT","IDLE","ARMED","TAKEOFF","FLYING","RTL","LANDING","ERROR"};
     Serial.printf("[FSM] %s → %s (%s)\n", names[(int)g_state], names[(int)s], reason);
     g_state = s;
@@ -583,9 +612,10 @@ static void fsmTick() {
         default: break;
     }
 
-    // Kickstart: jump to 25 immediately if starting from 0 to overcome static friction
+    // Kickstart: jump to 15 immediately if starting from 0 to overcome static friction
+    // (was 25, lowered to reduce Li-Po + regulator brown-out on motor spin-up)
     if (g_currentMotorThrottle == 0 && g_targetMotorThrottle > 0) {
-        g_currentMotorThrottle = 25;
+        g_currentMotorThrottle = 15;
     }
 
     // Global soft-start / soft-stop for motor throttle (all states)
@@ -603,6 +633,15 @@ static void gpsTick(float dt) {
     if (g_state != FsmState::TAKEOFF && g_state != FsmState::FLYING &&
         g_state != FsmState::RTL     && g_state != FsmState::LANDING) {
         g_vx = g_vy = g_vz = 0;
+        return;
+    }
+
+    // When synced to SITL, skip local virtual GPS drift.
+    // SITL drives lat/lon/alt directly via AS_LAT / AS_LON / AS_ALT.
+    if (g_syncActive) {
+        // Keep vertical velocity plausible for telemetry TX
+        g_vz = (g_targetAlt > g_alt) ? V_CLIMB_MPS : (g_targetAlt < g_alt) ? -V_CLIMB_MPS : 0.0f;
+        // Heading and ground speed come from SITL already; keep last known
         return;
     }
 

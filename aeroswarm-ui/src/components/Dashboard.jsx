@@ -444,6 +444,12 @@ export default function Dashboard() {
       return
     }
     for (const id of connected) {
+      const d = drones[id]
+      // RTL/LAND only makes sense for armed/flying drones
+      if ((action === 'rtl' || action === 'land') && (!d?.isArmed || d?.altitude < 1.0)) {
+        addLog('INFO', `Skipped ${action.toUpperCase()} for Drone #${id} — not flying.`)
+        continue
+      }
       await sendCommand(id, action)
     }
   }, [sendCommand, drones, addLog])
@@ -602,7 +608,7 @@ export default function Dashboard() {
           <MapContainer
             center={mapCenter}
             zoom={13}
-            style={{ position: 'absolute', inset: 0, cursor: selectedDroneId ? 'crosshair' : undefined }}
+            style={{ position: 'absolute', inset: 0, cursor: (missionPlannerOpen || selectedDroneId) ? 'crosshair' : undefined }}
             zoomControl={false}
           >
             <TileLayer
@@ -684,6 +690,22 @@ export default function Dashboard() {
               )
             })}
           </MapContainer>
+
+          {/* Mission Planning mode indicator */}
+          {missionPlannerOpen && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] glass-panel px-5 py-2 rounded-full flex items-center gap-3 font-mono text-sm pointer-events-auto border border-secondary/40 shadow-[0_0_12px_rgba(74,225,118,0.2)]">
+              <span className="w-2 h-2 rounded-full bg-secondary animate-pulse shrink-0" />
+              <span className="text-secondary font-bold uppercase tracking-widest text-xs">Planning Mode</span>
+              <span className="text-on-surface-variant text-xs">Click on the map to add waypoints</span>
+              <button
+                onClick={() => setMissionPlannerOpen(false)}
+                className="text-outline hover:text-error transition-colors ml-1"
+                title="Close planner"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+          )}
 
           {/* GOTO mode indicator — shown when a drone is selected */}
           {selectedDroneId && (

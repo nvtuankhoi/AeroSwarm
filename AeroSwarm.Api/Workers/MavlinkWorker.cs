@@ -284,6 +284,8 @@ public class MavlinkWorker : BackgroundService
                 MavlinkV2.EncodeNamedValueFloat(t, "AS_ARM", state.IsArmed ? 1.0f : 0.0f),
                 MavlinkV2.EncodeNamedValueFloat(t, "AS_MOD", ModeToSyncValue(state.Mode)),
                 MavlinkV2.EncodeNamedValueFloat(t, "AS_ALT", state.Altitude),
+                MavlinkV2.EncodeNamedValueFloat(t, "AS_LAT", (float)state.Latitude),
+                MavlinkV2.EncodeNamedValueFloat(t, "AS_LON", (float)state.Longitude),
             };
 
             foreach (var f in frames)
