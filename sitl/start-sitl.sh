@@ -9,21 +9,14 @@ LOCATION="${LOCATION:-CMAC}"
 SCRIPT_DIR="${0:A:h}"
 PROJECT_ROOT="${SCRIPT_DIR:h}"
 
-# Prefer local symlink created by install-ardupilot-mac.sh, then PATH
-SIM_VEHICLE_CMD="${PROJECT_ROOT}/sitl/.bin/sim_vehicle.py"
-if [[ ! -f "$SIM_VEHICLE_CMD" ]]; then
-    if command -v sim_vehicle.py &>/dev/null; then
-        SIM_VEHICLE_CMD="sim_vehicle.py"
-    else
-        echo "Error: sim_vehicle.py not found."
-        echo ""
-        echo "Install ArduPilot SITL first:"
-        echo "  ./sitl/install-ardupilot-mac.sh"
-        echo ""
-        echo "Or add ArduPilot Tools/autotest to your PATH:"
-        echo "  export PATH=\"\$HOME/ardupilot/Tools/autotest:\$PATH\""
-        exit 1
-    fi
+# ArduCopter SITL binary path
+ARDUCOPTER_BIN="${HOME}/ardupilot/build/sitl/bin/arducopter"
+if [[ ! -f "$ARDUCOPTER_BIN" ]]; then
+    echo "Error: arducopter binary not found at $ARDUCOPTER_BIN"
+    echo ""
+    echo "Build ArduPilot SITL first:"
+    echo "  cd ~/ardupilot && ./waf configure --board sitl && ./waf build --target bin/arducopter"
+    exit 1
 fi
 
 SYS_IDS=(4 5 6 7 8)
@@ -70,14 +63,19 @@ for i in {1..5}; do
     tcp_port=${SITL_TCP_PORTS[$idx]}
 
     echo "  - Drone $i: SYSID=$sysid, instance=$instance, TCP console=$tcp_port"
-    "$SIM_VEHICLE_CMD" \
-        -v ArduCopter \
+    mkdir -p "/tmp/sitl_instance_${instance}"
+    cd "/tmp/sitl_instance_${instance}"
+    nohup "$ARDUCOPTER_BIN" \
+        --model + \
+        --speedup 1 \
         --sysid "$sysid" \
+        --slave 0 \
+        --sim-address=127.0.0.1 \
         -I "$instance" \
-        --location "$LOCATION" \
-        --no-mavproxy &
-
+        --home -35.363261,149.16523,584.0,353.0 \
+        > "/tmp/sitl_instance_${instance}/ardu.log" 2>&1 &
     PIDS+=($!)
+    cd - > /dev/null
     sleep 3
 done
 

@@ -81,6 +81,16 @@ public class DroneCommandController : ControllerBase
         return Ok(new { message = $"LAND command sent to drone {droneId}" });
     }
 
+    [HttpPost("{droneId:int}/guided")]
+    public async Task<IActionResult> Guided(int droneId)
+    {
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
+        var modeFrame = MavlinkV2.EncodeSetMode((byte)droneId, baseMode: 1, customMode: 4);
+        await SendAsync(ip, port, modeFrame);
+        await LogAndBroadcast(droneId, "CMD", $"Sent SET_MODE GUIDED to Drone #{droneId}.");
+        return Ok(new { message = $"GUIDED command sent to drone {droneId}" });
+    }
+
     [HttpPost("{droneId:int}/takeoff")]
     public async Task<IActionResult> Takeoff(int droneId, [FromBody] TakeoffRequest req)
     {
