@@ -86,10 +86,15 @@ public class DroneCommandController : ControllerBase
     {
         if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         var alt = req.Altitude <= 0 ? 10f : req.Altitude;
+
+        // ArduPilot (SITL and real) requires GUIDED mode before TAKEOFF
+        var modeFrame = MavlinkV2.EncodeSetMode((byte)droneId, baseMode: 1, customMode: 4);
+        await SendAsync(ip, port, modeFrame);
+
         var frame = MavlinkV2.EncodeCommandLong((byte)droneId, MavlinkV2.AutopilotCompId,
             MavlinkV2.CMD_NAV_TAKEOFF, p7: alt);
         await SendAsync(ip, port, frame);
-        await LogAndBroadcast(droneId, "CMD", $"Sent NAV_TAKEOFF alt={alt}m to Drone #{droneId}.");
+        await LogAndBroadcast(droneId, "CMD", $"Sent GUIDED + NAV_TAKEOFF alt={alt}m to Drone #{droneId}.");
         return Ok(new { message = $"TAKEOFF command sent to drone {droneId}", altitude = alt });
     }
 
@@ -99,17 +104,23 @@ public class DroneCommandController : ControllerBase
         if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         int latE7 = (int)(req.Lat * 1e7);
         int lonE7 = (int)(req.Lon * 1e7);
-        var frame = MavlinkV2.EncodeMissionItemInt(
+
+        // 1. Set GUIDED mode first (required for SITL and ArduPilot autopilots)
+        var modeFrame = MavlinkV2.EncodeSetMode((byte)droneId, baseMode: 1, customMode: 4);
+        await SendAsync(ip, port, modeFrame);
+
+        // 2. Send position target using SET_POSITION_TARGET_GLOBAL_INT (msg 86)
+        //    type_mask 0x0FF8 = position only (ignore velocity, accel, yaw)
+        var posFrame = MavlinkV2.EncodeSetPositionTargetGlobalInt(
             targetSysId: (byte)droneId,
             targetCompId: MavlinkV2.AutopilotCompId,
-            seq: 0,
-            frame: 3, // MAV_FRAME_GLOBAL_RELATIVE_ALT
-            command: MavlinkV2.CMD_NAV_WAYPOINT,
-            current: 2, // GUIDED-mode "fly to"
-            autocontinue: 1,
-            p1: 0, p2: 0, p3: 0, p4: 0,
-            latE7: latE7, lonE7: lonE7, alt: req.Alt);
-        await SendAsync(ip, port, frame);
+            typeMask: 0x0FF8,
+            coordinateFrame: 3, // MAV_FRAME_GLOBAL_RELATIVE_ALT
+            latE7: latE7,
+            lonE7: lonE7,
+            alt: req.Alt);
+        await SendAsync(ip, port, posFrame);
+
         await LogAndBroadcast(droneId, "CMD", $"Sent GOTO ({req.Lat:F5},{req.Lon:F5}) alt={req.Alt}m to Drone #{droneId}.");
         return Ok(new { message = $"GOTO sent to drone {droneId}" });
     }

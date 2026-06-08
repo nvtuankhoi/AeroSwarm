@@ -144,19 +144,19 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
 
   const isArmed = drone?.isArmed
   const mode = drone?.mode || 'STABILIZE'
-  const inFlight = isArmed && (mode === 'GUIDED' || mode === 'LOITER')
-  const inAuto = mode === 'LAND' || mode === 'RTL'
+  const inAuto = (mode === 'LAND' || mode === 'RTL') && drone?.altitude > 1.0
+  const isFlying = isArmed && drone?.altitude > 1.0
 
   // Optimistic: if we just sent takeoff/guided, lock disarm until telemetry confirms
   const optimisticFlying = lastCmd === 'takeoff' || lastCmd === 'guided' || lastCmd === 'rtl' || lastCmd === 'land'
 
   const can = {
     arm: !isArmed && !inAuto && !optimisticFlying,
-    disarm: isArmed && !inFlight && !inAuto && !optimisticFlying,
+    disarm: isArmed && !isFlying && !inAuto && !optimisticFlying,
     rtl: isArmed && !inAuto,
     land: isArmed && !inAuto,
-    guided: !inAuto && !optimisticFlying,
-    takeoff: !inFlight && !inAuto,
+    guided: !inAuto && !optimisticFlying && mode !== 'GUIDED',
+    takeoff: isArmed && !isFlying && !inAuto,
   }
 
   const cmd = async (action) => {

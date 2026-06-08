@@ -25,6 +25,7 @@ public static class MavlinkV2
     public const uint MSG_MISSION_ACK = 47;
     public const uint MSG_MISSION_REQUEST_INT = 51;
     public const uint MSG_MISSION_ITEM_INT = 73;
+    public const uint MSG_SET_POSITION_TARGET_GLOBAL_INT = 86;
     public const uint MSG_COMMAND_INT = 75;
     public const uint MSG_COMMAND_LONG = 76;
     public const uint MSG_COMMAND_ACK = 77;
@@ -56,6 +57,7 @@ public static class MavlinkV2
         { MSG_MISSION_ACK, 153 },
         { MSG_MISSION_REQUEST_INT, 38 },
         { MSG_MISSION_ITEM_INT, 38 },
+        { MSG_SET_POSITION_TARGET_GLOBAL_INT, 5 },
         { MSG_COMMAND_INT, 158 },
         { MSG_COMMAND_LONG, 152 },
         { MSG_COMMAND_ACK, 143 },
@@ -242,5 +244,31 @@ public static class MavlinkV2
         p[36] = autocontinue;
         p[37] = missionType;
         return Encode(MSG_MISSION_ITEM_INT, GcsSysId, GcsCompId, p);
+    }
+
+    public static byte[] EncodeSetPositionTargetGlobalInt(byte targetSysId, byte targetCompId,
+        ushort typeMask, byte coordinateFrame, int latE7, int lonE7, float alt,
+        float vx = 0, float vy = 0, float vz = 0,
+        float afx = 0, float afy = 0, float afz = 0,
+        float yaw = 0, float yawRate = 0)
+    {
+        var p = new byte[53];
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(0, 4), 0);           // time_boot_ms
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(4, 4), latE7);        // lat_int
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(8, 4), lonE7);        // lon_int
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(12, 4), alt);        // alt
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(16, 4), vx);         // vx
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(20, 4), vy);         // vy
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(24, 4), vz);         // vz
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(28, 4), afx);        // afx
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(32, 4), afy);        // afy
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(36, 4), afz);        // afz
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(40, 4), yaw);        // yaw
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(44, 4), yawRate);    // yaw_rate
+        BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(48, 2), typeMask);   // type_mask
+        p[50] = targetSysId;
+        p[51] = targetCompId;
+        p[52] = coordinateFrame;
+        return Encode(MSG_SET_POSITION_TARGET_GLOBAL_INT, GcsSysId, GcsCompId, p);
     }
 }
