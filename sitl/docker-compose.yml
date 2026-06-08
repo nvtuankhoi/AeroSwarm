@@ -1,0 +1,50 @@
+services:
+  sitl_1:
+    image: orthuk/ardupilot-sitl
+    container_name: sitl_1
+    command: >
+      ./Tools/autotest/sim_vehicle.py -v ArduCopter --sysid 1 -I 0
+      --out udp:host.docker.internal:14550
+      --location CMAC
+      --no-mavproxy
+    restart: unless-stopped
+
+  sitl_2:
+    image: orthuk/ardupilot-sitl
+    container_name: sitl_2
+    command: >
+      ./Tools/autotest/sim_vehicle.py -v ArduCopter --sysid 2 -I 1
+      --out udp:host.docker.internal:14560
+      --location CMAC
+      --no-mavproxy
+    restart: unless-stopped
+
+  sitl_3:
+    image: orthuk/ardupilot-sitl
+    container_name: sitl_3
+    command: >
+      ./Tools/autotest/sim_vehicle.py -v ArduCopter --sysid 3 -I 2
+      --out udp:host.docker.internal:14570
+      --location CMAC
+      --no-mavproxy
+    restart: unless-stopped
+
+  sitl_4:
+    image: orthuk/ardupilot-sitl
+    container_name: sitl_4
+    command: >
+      ./Tools/autotest/sim_vehicle.py -v ArduCopter --sysid 4 -I 3
+      --out udp:host.docker.internal:14580
+      --location CMAC
+      --no-mavproxy
+    restart: unless-stopped
+
+  sitl_5:
+    image: orthuk/ardupilot-sitl
+    container_name: sitl_5
+    command: >
+      ./Tools/autotest/sim_vehicle.py -v ArduCopter --sysid 5 -I 4
+      --out udp:host.docker.internal:14590
+      --location CMAC
+      --no-mavproxy
+    restart: unless-stopped
