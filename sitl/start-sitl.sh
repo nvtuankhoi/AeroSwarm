@@ -26,10 +26,10 @@ if [[ ! -f "$SIM_VEHICLE_CMD" ]]; then
     fi
 fi
 
-SYS_IDS=(1 2 3 4 5)
+SYS_IDS=(4 5 6 7 8)
 INSTANCE_IDS=(0 1 2 3 4)
 SITL_TCP_PORTS=(5760 5770 5780 5790 5800)
-BACKEND_PORTS=(14550 14560 14570 14580 14590)
+BACKEND_PORTS=(14580 14590 14600 14610 14620)
 
 PIDS=()
 
@@ -60,7 +60,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting 5 ArduCopter SITL instances (location: $LOCATION)..."
+echo "Starting 5 ArduCopter SITL instances (location: $LOCATION, drones 4-8)..."
 echo ""
 
 for i in {1..5}; do
