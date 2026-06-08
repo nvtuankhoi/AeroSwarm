@@ -32,12 +32,20 @@ tcp_sockets = {}
 tcp_lock = threading.Lock()
 
 
+_hb_seq = 0
+_hb_lock = threading.Lock()
+
+
 def build_gcs_heartbeat():
     """Build a MAVLink v2 GCS HEARTBEAT (sysid=255, compid=190)."""
+    global _hb_seq
+    with _hb_lock:
+        seq = _hb_seq
+        _hb_seq = (_hb_seq + 1) & 0xFF
+
     payload = bytes([0, 0, 0, 0, 6, 8, 0, 4, 3])  # 9 bytes
     msg_id = 0
     crc_extra = 50
-    seq = 0
 
     def crc_accum(crc, b):
         tmp = b ^ (crc & 0xFF)
@@ -98,6 +106,7 @@ def run_bridge(instance_idx: int, tcp_port: int, backend_udp_port: int):
                 tcp_sockets[instance_idx] = tcp_sock
 
             udp_backend = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            udp_backend.setblocking(False)
             udp_qgc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             buf = bytearray()
 
@@ -107,18 +116,13 @@ def run_bridge(instance_idx: int, tcp_port: int, backend_udp_port: int):
                     if not data:
                         break
                     buf.extend(data)
-                    print(f"{label} RX {len(data)} bytes, buf={len(buf)}")
                 except socket.timeout:
                     pass
 
                 # Forward complete frames to backend and QGC
-                frame_count = 0
                 for frame in extract_frames(buf):
-                    frame_count += 1
                     udp_backend.sendto(frame, backend_endpoint)
                     udp_qgc.sendto(frame, qgc_endpoint)
-                if frame_count > 0:
-                    print(f"{label} Forwarded {frame_count} frames to backend {backend_udp_port}")
 
                 # Backend replies -> SITL
                 try:
@@ -147,8 +151,8 @@ def run_bridge(instance_idx: int, tcp_port: int, backend_udp_port: int):
 
 def heartbeat_sender():
     """Send GCS heartbeat to all connected SITL instances at 1 Hz."""
-    hb = build_gcs_heartbeat()
     while True:
+        hb = build_gcs_heartbeat()
         with tcp_lock:
             socks = list(tcp_sockets.values())
         for sock in socks:
