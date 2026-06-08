@@ -9,7 +9,7 @@ import { getToken, logout } from '../services/authService'
 import { fetchConfig, sendSetHome } from '../services/swarmService'
 import MissionPlanner from './MissionPlanner'
 
-const API = 'http://localhost:5000/api'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5501/api'
 const MAX_TRAIL = 20
 const MAX_LOGS = 100
 const DEFAULT_DRONE_IDS = [1, 2, 3, 4, 5]
@@ -374,7 +374,7 @@ export default function Dashboard() {
   // SignalR connection
   useEffect(() => {
     const connection = new HubConnectionBuilder()
-      .withUrl('http://localhost:5000/hubs/drone', {
+      .withUrl(import.meta.env.VITE_HUB_URL || 'http://localhost:5501/hubs/drone', {
         accessTokenFactory: () => getToken(),
       })
       .withAutomaticReconnect()
