@@ -7,8 +7,10 @@
 #endif
 
 // ── Network ───────────────────────────────────────────────────────────
-constexpr uint16_t GCS_UDP_PORT = 14550;   // RX + TX same port
-constexpr uint16_t LOCAL_UDP_PORT = 14550;
+// Port auto-derived from sysid so each drone gets its own channel:
+//   sysid 1 → 14550, sysid 2 → 14560, sysid 3 → 14570, ...
+constexpr uint16_t GCS_UDP_PORT   = 14550 + (DEFAULT_SYSID - 1) * 10;
+constexpr uint16_t LOCAL_UDP_PORT = 14550 + (DEFAULT_SYSID - 1) * 10;
 
 // ── Pinout (ESP32-C3 Super Mini) ──────────────────────────────────────
 constexpr uint8_t BATT_ADC_PIN     = 3;    // ADC1_CH3
@@ -26,7 +28,7 @@ constexpr uint8_t BOOT_BUTTON_PIN  = 9;
   constexpr uint8_t MOTOR_PIN   = 2;    // was 10 (SPICS0, unsafe); GPIO2 is free I/O
   constexpr uint8_t MOTOR_CHAN  = 3;
   constexpr uint32_t MOTOR_PWM_FREQ = 1000;   // 1 kHz for TIP120 (cooler than 20 kHz)
-  constexpr uint8_t MOTOR_PWM_RES   = 8;     // 0-255
+  constexpr uint8_t  MOTOR_PWM_RES   = 8;     // 0-255
 #endif
 
 // ── Battery (1S Li-Po, 100k/100k discrete divider) ────────────────────
@@ -55,7 +57,7 @@ constexpr uint32_t BATTERY_TX_MS    = 1000;
 constexpr uint32_t SYS_STATUS_TX_MS = 1000;
 
 // ── FSM tick rate ─────────────────────────────────────────────────────
-constexpr uint32_t FSM_TICK_MS = 50;
+constexpr uint32_t FSM_TICK_MS = 200;   // slow ramp to avoid Li-Po brownout
 
 // ── OTA ───────────────────────────────────────────────────────────────
 constexpr const char* OTA_PASSWORD = "aeroswarm";

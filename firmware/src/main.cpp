@@ -44,6 +44,7 @@ uint8_t   g_sysId = DEFAULT_SYSID;
 FsmState  g_state = FsmState::BOOT;
 static uint8_t g_currentMotorThrottle = 0;
 static uint8_t g_targetMotorThrottle = 0;
+static uint32_t g_flightStartMs = 0;
 
 // Virtual GPS state
 double g_lat = 0.0, g_lon = 0.0;
@@ -428,27 +429,27 @@ static void changeState(FsmState s, const char* reason) {
         case FsmState::TAKEOFF:
             g_targetLat = g_lat; g_targetLon = g_lon;  // climb in place
             g_hasTarget = true;
-            g_targetMotorThrottle = 25;
+            g_targetMotorThrottle = 18;   // ~7% — light spin, minimize Li-Po load
             break;
         case FsmState::FLYING:
-            g_targetMotorThrottle = 30;
+            g_targetMotorThrottle = 20;   // ~8% cruise
             break;
         case FsmState::RTL:
             g_targetLat = g_homeLat; g_targetLon = g_homeLon;
             g_targetAlt = g_homeAlt + 10.0f;
             g_hasTarget = g_homeSet;
-            g_targetMotorThrottle = 30;
+            g_targetMotorThrottle = 20;
             break;
         case FsmState::LANDING:
             g_targetAlt = 0.0f;
-            g_targetMotorThrottle = 25;
+            g_targetMotorThrottle = 15;   // ~6% descent
             break;
         case FsmState::IDLE:
             g_targetMotorThrottle = 0;
             g_hasTarget = false;
             break;
         case FsmState::ARMED:
-            g_targetMotorThrottle = 15;
+            g_targetMotorThrottle = 0;    // props off when armed
             break;
         case FsmState::ERROR_STATE:
             g_targetMotorThrottle = 0;
@@ -517,7 +518,10 @@ static void fsmTick() {
         default: break;
     }
 
-    // Battery failsafe REMOVED — no battery monitoring in this build
+    // Kickstart: jump to 25 immediately if starting from 0 to overcome static friction
+    if (g_currentMotorThrottle == 0 && g_targetMotorThrottle > 0) {
+        g_currentMotorThrottle = 25;
+    }
 
     // Global soft-start / soft-stop for motor throttle (all states)
     if (g_currentMotorThrottle < g_targetMotorThrottle) {
@@ -525,6 +529,7 @@ static void fsmTick() {
     } else if (g_currentMotorThrottle > g_targetMotorThrottle) {
         g_currentMotorThrottle--;
     }
+    Serial.printf("[MOTOR] state=%d curr=%d target=%d\n", (int)g_state, g_currentMotorThrottle, g_targetMotorThrottle);
     peripherals::motorsSet(g_currentMotorThrottle);
 }
 
@@ -702,8 +707,7 @@ static void sendUdp(const uint8_t* data, int len, IPAddress dst) {
     }
     g_udp.beginPacket(dst, GCS_UDP_PORT);
     g_udp.write(data, len);
-    int sent = g_udp.endPacket();
-    Serial.printf("[UDP] sent %d bytes to %s:%d (ok=%d)\n", len, dst.toString().c_str(), GCS_UDP_PORT, sent);
+    g_udp.endPacket();
 }
 
 // ── Geo helpers ───────────────────────────────────────────────────────
