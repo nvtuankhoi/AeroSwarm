@@ -2,7 +2,6 @@ import { Component } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
-import Simulator3D from './components/Simulator3D'
 import { isAuthenticated } from './services/authService'
 
 function PrivateRoute({ children }) {
@@ -46,7 +45,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-        <Route path="/simulator" element={<PrivateRoute><Simulator3D /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ErrorBoundary>

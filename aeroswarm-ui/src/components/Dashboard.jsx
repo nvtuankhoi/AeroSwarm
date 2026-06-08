@@ -548,13 +548,6 @@ export default function Dashboard() {
           <span className="material-symbols-outlined text-primary text-2xl">hub</span>
           <h1 className="text-xl font-bold tracking-tight text-primary uppercase">AeroSwarm</h1>
           <span className="text-on-surface-variant text-sm ml-2 border-l border-outline-variant/30 pl-4">Multi-UAV Command Center</span>
-          <button
-            onClick={() => navigate('/simulator')}
-            className="ml-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-high border border-outline-variant/30 text-on-surface hover:bg-secondary/20 hover:text-secondary hover:border-secondary/40 transition-colors text-[11px] font-bold uppercase tracking-widest"
-          >
-            <span className="material-symbols-outlined text-[14px]">airware</span>
-            Simulator
-          </button>
         </div>
         <div className="flex items-center gap-2">
           {[
