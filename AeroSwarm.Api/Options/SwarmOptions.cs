@@ -8,6 +8,7 @@ public class SwarmOptions
     public string IpTemplate { get; set; } = "10.105.151.{0}";
     public int IpStart { get; set; } = 101;
     public int UdpPort { get; set; } = 14550;
+    public List<int> UdpPorts { get; set; } = new();
     public string BindHost { get; set; } = "0.0.0.0";
     public double HeartbeatIntervalSec { get; set; } = 1.0;
     public double DropoutThresholdSec { get; set; } = 3.0;
@@ -20,6 +21,12 @@ public class SwarmOptions
 
     public string GetIp(int droneId) =>
         string.Format(IpTemplate, IpStart + (droneId - 1));
+
+    public int GetPort(int droneId)
+    {
+        if (droneId >= 1 && droneId <= UdpPorts.Count) return UdpPorts[droneId - 1];
+        return UdpPort;
+    }
 
     public IReadOnlyDictionary<int, string> BuildIpMap() =>
         DroneIds.ToDictionary(id => id, GetIp);

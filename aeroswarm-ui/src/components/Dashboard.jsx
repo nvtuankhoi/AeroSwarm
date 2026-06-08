@@ -25,6 +25,7 @@ function droneColor(drone) {
   if (!drone || !drone.isArmed) return '#ffb4ab' // error/red
   if (drone.mode === 'GUIDED') return '#4ae176'   // secondary/green
   if (drone.mode === 'LOITER') return '#ffb95f'   // tertiary/orange
+  if (drone.mode === 'AUTO') return '#e88af0'     // mission/purple
   return '#adc6ff'                                 // primary/blue
 }
 
@@ -114,6 +115,8 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
     ? 'border-t-secondary text-secondary'
     : drone?.mode === 'LOITER'
     ? 'border-t-tertiary text-tertiary'
+    : drone?.mode === 'AUTO'
+    ? 'border-t-[#e88af0] text-[#e88af0]'
     : 'border-t-primary text-primary'
 
   const statusTextClass = !drone || !drone.isArmed
@@ -122,6 +125,8 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
     ? 'text-secondary'
     : drone?.mode === 'LOITER'
     ? 'text-tertiary'
+    : drone?.mode === 'AUTO'
+    ? 'text-[#e88af0]'
     : 'text-primary'
 
   const dotClass = !drone || !drone.isArmed
@@ -130,6 +135,8 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
     ? 'bg-secondary shadow-[0_0_5px_#4ae176]'
     : drone?.mode === 'LOITER'
     ? 'bg-tertiary shadow-[0_0_5px_#ffb95f]'
+    : drone?.mode === 'AUTO'
+    ? 'bg-[#e88af0] shadow-[0_0_5px_#e88af0]'
     : 'bg-primary shadow-[0_0_5px_#adc6ff]'
 
   const [isPending, setIsPending] = useState(false)

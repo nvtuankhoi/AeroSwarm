@@ -29,6 +29,9 @@ public static class MavlinkV2
     public const uint MSG_COMMAND_LONG = 76;
     public const uint MSG_COMMAND_ACK = 77;
     public const uint MSG_BATTERY_STATUS = 147;
+    public const uint MSG_REQUEST_DATA_STREAM = 66;
+    public const uint MSG_MESSAGE_INTERVAL = 244;
+    public const uint MSG_SET_MESSAGE_INTERVAL = 511;
     public const uint MSG_STATUSTEXT = 253;
 
     // MAV_CMD constants
@@ -57,6 +60,9 @@ public static class MavlinkV2
         { MSG_COMMAND_LONG, 152 },
         { MSG_COMMAND_ACK, 143 },
         { MSG_BATTERY_STATUS, 154 },
+        { MSG_REQUEST_DATA_STREAM, 148 },
+        { MSG_MESSAGE_INTERVAL, 67 },
+        { MSG_SET_MESSAGE_INTERVAL, 19 },
         { MSG_STATUSTEXT, 83 },
     };
 
@@ -188,6 +194,30 @@ public static class MavlinkV2
         p[3] = targetCompId;
         p[4] = missionType;
         return Encode(MSG_MISSION_COUNT, GcsSysId, GcsCompId, p);
+    }
+
+    public static byte[] EncodeRequestDataStream(byte targetSysId, byte targetCompId,
+        byte reqStreamId, ushort reqMessageRate, byte startStop)
+    {
+        var p = new byte[6];
+        p[0] = targetSysId;
+        p[1] = targetCompId;
+        p[2] = reqStreamId;
+        BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(3, 2), reqMessageRate);
+        p[5] = startStop;
+        return Encode(MSG_REQUEST_DATA_STREAM, GcsSysId, GcsCompId, p);
+    }
+
+    public static byte[] EncodeSetMessageInterval(byte targetSysId, byte targetCompId,
+        uint messageId, int intervalUs, byte responseTarget = 0)
+    {
+        var p = new byte[11];
+        p[0] = targetSysId;
+        p[1] = targetCompId;
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(2, 4), messageId);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(6, 4), intervalUs);
+        p[10] = responseTarget;
+        return Encode(MSG_SET_MESSAGE_INTERVAL, GcsSysId, GcsCompId, p);
     }
 
     public static byte[] EncodeMissionItemInt(byte targetSysId, byte targetCompId, ushort seq,
