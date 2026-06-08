@@ -33,6 +33,7 @@ public static class MavlinkV2
     public const uint MSG_REQUEST_DATA_STREAM = 66;
     public const uint MSG_MESSAGE_INTERVAL = 244;
     public const uint MSG_SET_MESSAGE_INTERVAL = 511;
+    public const uint MSG_NAMED_VALUE_FLOAT = 251;
     public const uint MSG_STATUSTEXT = 253;
 
     // MAV_CMD constants
@@ -65,6 +66,7 @@ public static class MavlinkV2
         { MSG_REQUEST_DATA_STREAM, 148 },
         { MSG_MESSAGE_INTERVAL, 67 },
         { MSG_SET_MESSAGE_INTERVAL, 19 },
+        { MSG_NAMED_VALUE_FLOAT, 145 },
         { MSG_STATUSTEXT, 83 },
     };
 
@@ -270,5 +272,17 @@ public static class MavlinkV2
         p[51] = targetCompId;
         p[52] = coordinateFrame;
         return Encode(MSG_SET_POSITION_TARGET_GLOBAL_INT, GcsSysId, GcsCompId, p);
+    }
+
+    public static byte[] EncodeNamedValueFloat(uint timeBootMs, string name, float value)
+    {
+        var p = new byte[18];
+        BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(0, 4), timeBootMs);
+        var nameBytes = System.Text.Encoding.ASCII.GetBytes(name);
+        var copyLen = Math.Min(nameBytes.Length, 10);
+        nameBytes.AsSpan(0, copyLen).CopyTo(p.AsSpan(4, 10));
+        for (int i = copyLen; i < 10; i++) p[4 + i] = 0;
+        BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(14, 4), value);
+        return Encode(MSG_NAMED_VALUE_FLOAT, GcsSysId, GcsCompId, p);
     }
 }

@@ -24,6 +24,7 @@ constexpr uint32_t MSG_MISSION_ITEM_INT    = 73;
 constexpr uint32_t MSG_COMMAND_LONG        = 76;
 constexpr uint32_t MSG_COMMAND_ACK         = 77;
 constexpr uint32_t MSG_BATTERY_STATUS      = 147;
+constexpr uint32_t MSG_NAMED_VALUE_FLOAT   = 251;
 constexpr uint32_t MSG_STATUSTEXT          = 253;
 
 // MAV_CMD constants
@@ -50,6 +51,7 @@ inline uint8_t crcExtra(uint32_t msgId) {
         case MSG_COMMAND_LONG:        return 152;
         case MSG_COMMAND_ACK:         return 143;
         case MSG_BATTERY_STATUS:      return 154;
+        case MSG_NAMED_VALUE_FLOAT:   return 145;
         case MSG_STATUSTEXT:          return 83;
         default:                      return 0;
     }
@@ -278,6 +280,21 @@ inline bool parseMissionCount(const uint8_t* payload, uint8_t len, MissionCountP
     out.targetSys = payload[2];
     out.targetComp = payload[3];
     out.missionType = payload[4];
+    return true;
+}
+
+struct NamedValueFloatPayload {
+    uint32_t timeBootMs;
+    char name[10];
+    float value;
+};
+
+inline bool parseNamedValueFloat(const uint8_t* payload, uint8_t len, NamedValueFloatPayload& out) {
+    if (len < 18) return false;
+    memcpy(&out.timeBootMs, payload, 4);
+    memcpy(out.name, payload + 4, 10);
+    out.name[9] = '\0';
+    memcpy(&out.value, payload + 14, 4);
     return true;
 }
 

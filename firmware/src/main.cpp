@@ -55,6 +55,13 @@ bool   g_hasTarget = false;
 float  g_vx = 0, g_vy = 0, g_vz = 0;
 float  g_heading = 0.0f;
 
+// SITL sync state (when paired with a SITL "brain" drone)
+static bool   g_syncActive = false;
+static bool   g_syncArmed  = false;
+static float  g_syncAlt    = 0.0f;
+static FsmState g_syncState = FsmState::IDLE;
+static uint32_t g_lastSyncMs = 0;
+
 // Home (set via MAV_CMD_DO_SET_HOME)
 double g_homeLat = DEFAULT_HOME_LAT;
 double g_homeLon = DEFAULT_HOME_LON;
@@ -99,6 +106,7 @@ static void onSetMode(const mavlink::Decoded& m);
 static void onMissionCount(const mavlink::Decoded& m, IPAddress src);
 static void onMissionItemInt(const mavlink::Decoded& m, IPAddress src);
 static void onMissionClearAll();
+static void onNamedValueFloat(const mavlink::Decoded& m);
 static void changeState(FsmState s, const char* reason);
 static void txHeartbeat();
 static void txGlobalPosition();
@@ -162,6 +170,7 @@ void loop() {
                 case mavlink::MSG_MISSION_COUNT:    onMissionCount(msg, src); break;
                 case mavlink::MSG_MISSION_ITEM_INT: onMissionItemInt(msg, src); break;
                 case mavlink::MSG_MISSION_CLEAR_ALL: onMissionClearAll(); break;
+                case mavlink::MSG_NAMED_VALUE_FLOAT: onNamedValueFloat(msg); break;
             }
         }
     }
@@ -416,6 +425,51 @@ static void onMissionClearAll() {
     txStatusText(6, "Mission cleared");
 }
 
+static void onNamedValueFloat(const mavlink::Decoded& m) {
+    mavlink::NamedValueFloatPayload p;
+    if (!mavlink::parseNamedValueFloat(m.payload, m.payloadLen, p)) return;
+
+    char name[11];
+    memcpy(name, p.name, 10);
+    name[10] = '\0';
+
+    if (strcmp(name, "AS_ARM") == 0) {
+        g_syncArmed = (p.value > 0.5f);
+    } else if (strcmp(name, "AS_MOD") == 0) {
+        g_syncState = (FsmState)(int)p.value;
+    } else if (strcmp(name, "AS_ALT") == 0) {
+        g_syncAlt = p.value;
+    } else {
+        return; // unknown name
+    }
+
+    g_lastSyncMs = millis();
+    g_syncActive = true;
+
+    // Apply synced state immediately to FSM + peripherals
+    if (strcmp(name, "AS_MOD") == 0) {
+        FsmState target = g_syncState;
+        if (target != g_state) {
+            // Validate target is within valid range
+            if (target >= FsmState::BOOT && target <= FsmState::ERROR_STATE) {
+                changeState(target, "sitl sync");
+            }
+        }
+    }
+
+    if (strcmp(name, "AS_ALT") == 0) {
+        g_targetAlt = g_syncAlt;
+        g_alt = g_syncAlt; // mirror altitude for telemetry TX
+    }
+
+    if (strcmp(name, "AS_ARM") == 0) {
+        // If disarmed remotely, force IDLE
+        if (!g_syncArmed && g_state != FsmState::IDLE) {
+            changeState(FsmState::IDLE, "sitl disarm");
+        }
+    }
+}
+
 // ── State machine ─────────────────────────────────────────────────────
 static void changeState(FsmState s, const char* reason) {
     if (s == g_state) return;
@@ -459,8 +513,15 @@ static void changeState(FsmState s, const char* reason) {
 }
 
 static void fsmTick() {
+    // If sync lost for 5s, resume local FSM autonomy
+    if (g_syncActive && (millis() - g_lastSyncMs) > 5000) {
+        g_syncActive = false;
+        txStatusText(4, "SITL sync lost, local FSM");
+    }
+
     switch (g_state) {
         case FsmState::TAKEOFF:
+            if (g_syncActive) break;
             if (fabs(g_alt - g_targetAlt) < 0.5f) {
                 changeState(FsmState::FLYING, "reached takeoff alt");
                 // Start mission if we have one
@@ -475,6 +536,7 @@ static void fsmTick() {
             break;
 
         case FsmState::FLYING:
+            if (g_syncActive) break;
             // Advance through mission waypoints
             if (g_missionCount > 0 && g_missionSeq < g_missionCount) {
                 double d = haversine(g_lat, g_lon, g_targetLat, g_targetLon);
@@ -501,13 +563,16 @@ static void fsmTick() {
             }
             break;
 
-        case FsmState::RTL: {
-            double d = haversine(g_lat, g_lon, g_homeLat, g_homeLon);
-            if (d < 2.0) changeState(FsmState::LANDING, "reached home");
+        case FsmState::RTL:
+            if (g_syncActive) break;
+            {
+                double d = haversine(g_lat, g_lon, g_homeLat, g_homeLon);
+                if (d < 2.0) changeState(FsmState::LANDING, "reached home");
+            }
             break;
-        }
 
         case FsmState::LANDING:
+            if (g_syncActive) break;
             if (g_alt < 0.2f) {
                 g_alt = 0.0f;
                 changeState(FsmState::IDLE, "landed");

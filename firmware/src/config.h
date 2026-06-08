@@ -69,6 +69,10 @@ constexpr double DEFAULT_HOME_LAT = 0.0;
 constexpr double DEFAULT_HOME_LON = 0.0;
 constexpr float  DEFAULT_HOME_ALT = 0.0f;
 
+// ── SITL sync (when ESP32 is a "body" paired with a SITL "brain") ────
+// Uncomment to compile with sync-only mode (no local FSM autonomy)
+// #define SITL_SYNC_MODE
+
 // ── NVS namespaces ────────────────────────────────────────────────────
 constexpr const char* NVS_NS_DRONE   = "drone";
 constexpr const char* NVS_NS_MISSION = "mission";

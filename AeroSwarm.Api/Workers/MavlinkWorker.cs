@@ -197,6 +197,12 @@ public class MavlinkWorker : BackgroundService
         var snapshot = _stateService.GetState(droneId);
         await _hubContext.Clients.All.SendAsync("ReceiveTelemetry", snapshot, ct);
 
+        // Forward SITL state to paired ESP32 for hardware feedback sync
+        if (_opts.SitlToEsp32Map.TryGetValue(droneId, out var esp32Id))
+        {
+            await ForwardStateToEsp32Async(snapshot, esp32Id, ct);
+        }
+
         var now = DateTime.UtcNow;
         if ((now - _lastDbWrite[droneId]).TotalSeconds >= _opts.TelemetryPersistIntervalSec)
         {
@@ -258,6 +264,53 @@ public class MavlinkWorker : BackgroundService
             _logger.LogDebug(ex, "Failed to request data streams for Drone #{DroneId}", targetSysId);
         }
     }
+
+    private async Task ForwardStateToEsp32Async(DroneTelemetry state, int esp32Id, CancellationToken ct)
+    {
+        if (!_stateService.TryGetEndpoint(esp32Id, out var ip, out var port) || port == 0)
+        {
+            _logger.LogDebug("Cannot forward SITL state: ESP32 #{Esp32Id} endpoint unknown", esp32Id);
+            return;
+        }
+
+        try
+        {
+            using var udp = new UdpClient();
+            var endpoint = new IPEndPoint(IPAddress.Parse(ip), port);
+            uint t = (uint)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
+
+            var frames = new[]
+            {
+                MavlinkV2.EncodeNamedValueFloat(t, "AS_ARM", state.IsArmed ? 1.0f : 0.0f),
+                MavlinkV2.EncodeNamedValueFloat(t, "AS_MOD", ModeToSyncValue(state.Mode)),
+                MavlinkV2.EncodeNamedValueFloat(t, "AS_ALT", state.Altitude),
+            };
+
+            foreach (var f in frames)
+            {
+                await udp.SendAsync(f, endpoint, ct);
+            }
+            _logger.LogDebug("Forwarded SITL state from #{SitlId} to ESP32 #{Esp32Id} @ {Ip}:{Port}",
+                state.DroneId, esp32Id, ip, port);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to forward SITL state to ESP32 #{Esp32Id}", esp32Id);
+        }
+    }
+
+    private static float ModeToSyncValue(string mode) => mode switch
+    {
+        "STABILIZE" => 0.0f,
+        "ARMED"     => 1.0f,
+        "TAKEOFF"   => 2.0f,
+        "GUIDED"    => 3.0f,
+        "LOITER"    => 3.0f,
+        "AUTO"      => 3.0f,
+        "RTL"       => 4.0f,
+        "LAND"      => 5.0f,
+        _           => 0.0f,
+    };
 
     private static string MapCustomModeToName(uint mode) => mode switch
     {

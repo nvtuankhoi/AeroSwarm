@@ -16,6 +16,7 @@ public class SwarmOptions
     public double LowVoltagePerCell { get; set; } = 3.30;
     public double CriticalVoltagePerCell { get; set; } = 3.20;
     public int LiPoCellCount { get; set; } = 1;
+    public Dictionary<int, int> SitlToEsp32Map { get; set; } = new();
 
     public IEnumerable<int> DroneIds => Enumerable.Range(1, DroneCount);
 
