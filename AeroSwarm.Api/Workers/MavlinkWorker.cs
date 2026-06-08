@@ -121,6 +121,10 @@ public class MavlinkWorker : BackgroundService
             _stateService.UpdateFromTelemetry(droneId, t =>
             {
                 t.Ip = source.Address.ToString();
+                if (!fromGcs)
+                {
+                    t.RemotePort = source.Port;
+                }
                 switch (msg.MsgId)
                 {
                     case MavlinkV2.MSG_HEARTBEAT:

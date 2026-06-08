@@ -9,4 +9,5 @@ public interface IDroneStateService
     void UpdateFromTelemetry(int droneId, Action<DroneTelemetry> mutator);
     void SetOnline(int droneId, bool isOnline);
     bool TryGetIp(int droneId, out string ip);
+    bool TryGetEndpoint(int droneId, out string ip, out int port);
 }

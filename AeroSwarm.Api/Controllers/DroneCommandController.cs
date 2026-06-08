@@ -41,10 +41,10 @@ public class DroneCommandController : ControllerBase
     [HttpPost("{droneId:int}/arm")]
     public async Task<IActionResult> Arm(int droneId)
     {
-        if (!Resolve(droneId, out var ip)) return BadRequest("Invalid drone ID");
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         var frame = MavlinkV2.EncodeCommandLong((byte)droneId, MavlinkV2.AutopilotCompId,
             MavlinkV2.CMD_COMPONENT_ARM_DISARM, p1: 1.0f);
-        await SendAsync(ip, frame);
+        await SendAsync(ip, port, frame);
         await LogAndBroadcast(droneId, "CMD", $"Sent MAV_CMD_COMPONENT_ARM (ARM) to Drone #{droneId}.");
         return Ok(new { message = $"ARM command sent to drone {droneId}" });
     }
@@ -52,10 +52,10 @@ public class DroneCommandController : ControllerBase
     [HttpPost("{droneId:int}/disarm")]
     public async Task<IActionResult> Disarm(int droneId)
     {
-        if (!Resolve(droneId, out var ip)) return BadRequest("Invalid drone ID");
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         var frame = MavlinkV2.EncodeCommandLong((byte)droneId, MavlinkV2.AutopilotCompId,
             MavlinkV2.CMD_COMPONENT_ARM_DISARM, p1: 0.0f);
-        await SendAsync(ip, frame);
+        await SendAsync(ip, port, frame);
         await LogAndBroadcast(droneId, "CMD", $"Sent MAV_CMD_COMPONENT_ARM (DISARM) to Drone #{droneId}.");
         return Ok(new { message = $"DISARM command sent to drone {droneId}" });
     }
@@ -63,10 +63,10 @@ public class DroneCommandController : ControllerBase
     [HttpPost("{droneId:int}/rtl")]
     public async Task<IActionResult> Rtl(int droneId)
     {
-        if (!Resolve(droneId, out var ip)) return BadRequest("Invalid drone ID");
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         // SET_MODE customMode=6 (RTL) — keeps backward compat with existing firmware mapping
         var frame = MavlinkV2.EncodeSetMode((byte)droneId, baseMode: 1, customMode: 6);
-        await SendAsync(ip, frame);
+        await SendAsync(ip, port, frame);
         await LogAndBroadcast(droneId, "CMD", $"Sent SET_MODE RTL to Drone #{droneId}.");
         return Ok(new { message = $"RTL command sent to drone {droneId}" });
     }
@@ -74,9 +74,9 @@ public class DroneCommandController : ControllerBase
     [HttpPost("{droneId:int}/land")]
     public async Task<IActionResult> Land(int droneId)
     {
-        if (!Resolve(droneId, out var ip)) return BadRequest("Invalid drone ID");
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         var frame = MavlinkV2.EncodeSetMode((byte)droneId, baseMode: 1, customMode: 9);
-        await SendAsync(ip, frame);
+        await SendAsync(ip, port, frame);
         await LogAndBroadcast(droneId, "CMD", $"Sent SET_MODE LAND to Drone #{droneId}.");
         return Ok(new { message = $"LAND command sent to drone {droneId}" });
     }
@@ -84,11 +84,11 @@ public class DroneCommandController : ControllerBase
     [HttpPost("{droneId:int}/takeoff")]
     public async Task<IActionResult> Takeoff(int droneId, [FromBody] TakeoffRequest req)
     {
-        if (!Resolve(droneId, out var ip)) return BadRequest("Invalid drone ID");
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         var alt = req.Altitude <= 0 ? 10f : req.Altitude;
         var frame = MavlinkV2.EncodeCommandLong((byte)droneId, MavlinkV2.AutopilotCompId,
             MavlinkV2.CMD_NAV_TAKEOFF, p7: alt);
-        await SendAsync(ip, frame);
+        await SendAsync(ip, port, frame);
         await LogAndBroadcast(droneId, "CMD", $"Sent NAV_TAKEOFF alt={alt}m to Drone #{droneId}.");
         return Ok(new { message = $"TAKEOFF command sent to drone {droneId}", altitude = alt });
     }
@@ -96,7 +96,7 @@ public class DroneCommandController : ControllerBase
     [HttpPost("{droneId:int}/goto")]
     public async Task<IActionResult> GoTo(int droneId, [FromBody] GotoRequest req)
     {
-        if (!Resolve(droneId, out var ip)) return BadRequest("Invalid drone ID");
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         int latE7 = (int)(req.Lat * 1e7);
         int lonE7 = (int)(req.Lon * 1e7);
         var frame = MavlinkV2.EncodeMissionItemInt(
@@ -109,7 +109,7 @@ public class DroneCommandController : ControllerBase
             autocontinue: 1,
             p1: 0, p2: 0, p3: 0, p4: 0,
             latE7: latE7, lonE7: lonE7, alt: req.Alt);
-        await SendAsync(ip, frame);
+        await SendAsync(ip, port, frame);
         await LogAndBroadcast(droneId, "CMD", $"Sent GOTO ({req.Lat:F5},{req.Lon:F5}) alt={req.Alt}m to Drone #{droneId}.");
         return Ok(new { message = $"GOTO sent to drone {droneId}" });
     }
@@ -117,29 +117,38 @@ public class DroneCommandController : ControllerBase
     [HttpPost("{droneId:int}/sethome")]
     public async Task<IActionResult> SetHome(int droneId, [FromBody] SetHomeRequest req)
     {
-        if (!Resolve(droneId, out var ip)) return BadRequest("Invalid drone ID");
+        if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
         var frame = MavlinkV2.EncodeCommandLong((byte)droneId, MavlinkV2.AutopilotCompId,
             MavlinkV2.CMD_DO_SET_HOME,
             p1: 0, // use specified location (not current)
             p5: (float)req.Lat,
             p6: (float)req.Lon,
             p7: req.Alt);
-        await SendAsync(ip, frame);
+        await SendAsync(ip, port, frame);
         await LogAndBroadcast(droneId, "CMD", $"Sent DO_SET_HOME ({req.Lat:F5},{req.Lon:F5}) to Drone #{droneId}.");
         return Ok(new { message = $"SET_HOME sent to drone {droneId}" });
     }
 
-    private bool Resolve(int droneId, out string ip)
+    private bool Resolve(int droneId, out string ip, out int port)
     {
         ip = "";
+        port = 0;
         if (droneId < 1 || droneId > _opts.DroneCount) return false;
-        return _stateService.TryGetIp(droneId, out ip);
+        if (_stateService.TryGetEndpoint(droneId, out ip!, out port) && port > 0)
+            return true;
+        // Fallback: use configured port if no live endpoint discovered yet
+        if (_stateService.TryGetIp(droneId, out ip!))
+        {
+            port = _opts.GetPort(droneId);
+            return true;
+        }
+        return false;
     }
 
-    private async Task SendAsync(string ip, byte[] payload)
+    private async Task SendAsync(string ip, int port, byte[] payload)
     {
         using var udp = new UdpClient();
-        await udp.SendAsync(payload, payload.Length, new IPEndPoint(IPAddress.Parse(ip), _opts.UdpPort));
+        await udp.SendAsync(payload, payload.Length, new IPEndPoint(IPAddress.Parse(ip), port));
     }
 
     private async Task LogAndBroadcast(int droneId, string eventType, string message)

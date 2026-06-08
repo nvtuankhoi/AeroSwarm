@@ -20,4 +20,5 @@ public class DroneTelemetry
     public DateTime LastSeen { get; set; } = DateTime.MinValue;
     public bool IsOnline { get; set; }
     public string Ip { get; set; } = string.Empty;
+    public int RemotePort { get; set; }
 }

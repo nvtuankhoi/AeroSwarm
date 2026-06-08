@@ -73,13 +73,32 @@ public class DroneStateService : IDroneStateService
     {
         lock (_lock)
         {
-            // Prefer live IP discovered from MAVLink packets
             if (_state.TryGetValue(droneId, out var t) && !string.IsNullOrEmpty(t.Ip))
             {
                 ip = t.Ip;
                 return true;
             }
             return _ipMap.TryGetValue(droneId, out ip!);
+        }
+    }
+
+    public bool TryGetEndpoint(int droneId, out string ip, out int port)
+    {
+        lock (_lock)
+        {
+            if (_state.TryGetValue(droneId, out var t) && !string.IsNullOrEmpty(t.Ip) && t.RemotePort > 0)
+            {
+                ip = t.Ip;
+                port = t.RemotePort;
+                return true;
+            }
+            if (_ipMap.TryGetValue(droneId, out ip!))
+            {
+                port = 0;
+                return true;
+            }
+            port = 0;
+            return false;
         }
     }
 
