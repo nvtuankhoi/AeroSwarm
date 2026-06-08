@@ -42,6 +42,8 @@ WiFiManager g_wm;
 
 uint8_t   g_sysId = DEFAULT_SYSID;
 FsmState  g_state = FsmState::BOOT;
+static uint8_t g_currentMotorThrottle = 0;
+static uint8_t g_targetMotorThrottle = 0;
 
 // Virtual GPS state
 double g_lat = 0.0, g_lon = 0.0;
@@ -217,18 +219,13 @@ static void connectWifi() {
     // Hardcoded test mode (secrets_local.h present) — skip captive portal.
     Serial.printf("[WIFI] connecting to '%s' (hardcoded)\n", WIFI_SSID);
     WiFi.mode(WIFI_STA);
-    WiFi.setMinSecurity(WIFI_AUTH_WEP);
     // VN region (scan ch 1-13)
     wifi_country_t country = { .cc = "VN", .schan = 1, .nchan = 13,
                                 .max_tx_power = 78, .policy = WIFI_COUNTRY_POLICY_MANUAL };
     esp_wifi_set_country(&country);
     // ESP32-C3 Super Mini PCB antenna fix: lower TX power + disable modem sleep.
-    // At default 19.5 dBm, RF mismatch causes WPA handshake fail with AUTH_EXPIRE.
     WiFi.setSleep(false);
     WiFi.setTxPower(WIFI_POWER_8_5dBm);
-    WiFi.persistent(false);
-    WiFi.disconnect(true, true);
-    delay(500);
     // Warmup RF with a scan (improves first-connect reliability on C3 Super Mini)
     Serial.println("[WIFI] RF warmup scan...");
     int n = WiFi.scanNetworks(false, true);
@@ -421,6 +418,7 @@ static void onMissionClearAll() {
 // ── State machine ─────────────────────────────────────────────────────
 static void changeState(FsmState s, const char* reason) {
     if (s == g_state) return;
+    g_currentMotorThrottle = 0; // reset soft-start ramp on any state transition
     const char* names[] = {"BOOT","IDLE","ARMED","TAKEOFF","FLYING","RTL","LANDING","ERROR"};
     Serial.printf("[FSM] %s → %s (%s)\n", names[(int)g_state], names[(int)s], reason);
     g_state = s;
@@ -430,30 +428,30 @@ static void changeState(FsmState s, const char* reason) {
         case FsmState::TAKEOFF:
             g_targetLat = g_lat; g_targetLon = g_lon;  // climb in place
             g_hasTarget = true;
-            peripherals::motorsSet(120);
+            g_targetMotorThrottle = 25;
             break;
         case FsmState::FLYING:
-            peripherals::motorsSet(180);
+            g_targetMotorThrottle = 30;
             break;
         case FsmState::RTL:
             g_targetLat = g_homeLat; g_targetLon = g_homeLon;
             g_targetAlt = g_homeAlt + 10.0f;
             g_hasTarget = g_homeSet;
-            peripherals::motorsSet(180);
+            g_targetMotorThrottle = 30;
             break;
         case FsmState::LANDING:
             g_targetAlt = 0.0f;
-            peripherals::motorsSet(120);
+            g_targetMotorThrottle = 25;
             break;
         case FsmState::IDLE:
-            peripherals::motorsSet(0);
+            g_targetMotorThrottle = 0;
             g_hasTarget = false;
             break;
         case FsmState::ARMED:
-            peripherals::motorsSet(30);
+            g_targetMotorThrottle = 15;
             break;
         case FsmState::ERROR_STATE:
-            peripherals::motorsSet(0);
+            g_targetMotorThrottle = 0;
             break;
         default: break;
     }
@@ -520,6 +518,14 @@ static void fsmTick() {
     }
 
     // Battery failsafe REMOVED — no battery monitoring in this build
+
+    // Global soft-start / soft-stop for motor throttle (all states)
+    if (g_currentMotorThrottle < g_targetMotorThrottle) {
+        g_currentMotorThrottle++;
+    } else if (g_currentMotorThrottle > g_targetMotorThrottle) {
+        g_currentMotorThrottle--;
+    }
+    peripherals::motorsSet(g_currentMotorThrottle);
 }
 
 // ── Virtual GPS ───────────────────────────────────────────────────────
@@ -640,7 +646,7 @@ static void txHeartbeat() {
         case FsmState::FLYING:  customMode = 4; break;  // GUIDED
         case FsmState::RTL:     customMode = 6; break;  // RTL
         case FsmState::LANDING: customMode = 9; break;  // LAND
-        case FsmState::ARMED:   customMode = 4; break;
+        case FsmState::ARMED:   customMode = 0; break;  // STABILIZE (was 4/GUIDED)
         default:                customMode = 0; break;  // STABILIZE
     }
     int n = mavlink::encHeartbeat(buf, g_sysId,
@@ -696,7 +702,8 @@ static void sendUdp(const uint8_t* data, int len, IPAddress dst) {
     }
     g_udp.beginPacket(dst, GCS_UDP_PORT);
     g_udp.write(data, len);
-    g_udp.endPacket();
+    int sent = g_udp.endPacket();
+    Serial.printf("[UDP] sent %d bytes to %s:%d (ok=%d)\n", len, dst.toString().c_str(), GCS_UDP_PORT, sent);
 }
 
 // ── Geo helpers ───────────────────────────────────────────────────────

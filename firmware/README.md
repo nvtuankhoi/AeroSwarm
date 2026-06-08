@@ -42,7 +42,7 @@ pio run -e demo_sysid1 -t upload --upload-port aeroswarm-drone-1.local
 | GPIO5 | RGB Green | + 100Ω |
 | GPIO6 | RGB Blue | + 100Ω |
 | GPIO7 | Buzzer TMB12A05 | Active digital |
-| GPIO10 | Motor PWM | 20kHz → 4× IRLZ44N gates parallel + 10kΩ pull-down → GND |
+| GPIO10 | Motor PWM | 1kHz → 2× TIP120 bases via 1kΩ + 10kΩ pull-down → GND |
 | GPIO8 | Onboard LED | Built-in, active-low, debug heartbeat |
 
 Power: Li-Po 1S 502030 (300mAh) → 134N3P JST → USB-A → USB-C cable → ESP32-C3 USB-C.

@@ -23,9 +23,9 @@ constexpr uint8_t BOOT_BUTTON_PIN  = 9;
   constexpr uint8_t RGB_G_CHAN  = 1;
   constexpr uint8_t RGB_B_CHAN  = 2;
   constexpr uint8_t BUZZER_PIN  = 7;
-  constexpr uint8_t MOTOR_PIN   = 10;
+  constexpr uint8_t MOTOR_PIN   = 2;    // was 10 (SPICS0, unsafe); GPIO2 is free I/O
   constexpr uint8_t MOTOR_CHAN  = 3;
-  constexpr uint32_t MOTOR_PWM_FREQ = 20000;
+  constexpr uint32_t MOTOR_PWM_FREQ = 1000;   // 1 kHz for TIP120 (cooler than 20 kHz)
   constexpr uint8_t MOTOR_PWM_RES   = 8;     // 0-255
 #endif
 

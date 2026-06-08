@@ -71,7 +71,16 @@ public class DroneStateService : IDroneStateService
 
     public bool TryGetIp(int droneId, out string ip)
     {
-        return _ipMap.TryGetValue(droneId, out ip!);
+        lock (_lock)
+        {
+            // Prefer live IP discovered from MAVLink packets
+            if (_state.TryGetValue(droneId, out var t) && !string.IsNullOrEmpty(t.Ip))
+            {
+                ip = t.Ip;
+                return true;
+            }
+            return _ipMap.TryGetValue(droneId, out ip!);
+        }
     }
 
     private static DroneTelemetry Clone(DroneTelemetry t) => new()

@@ -25,3 +25,7 @@ dist/
 .DS_Store
 Thumbs.db
 *.log
+
+# OMC state & backups
+.omc/
+*.bak

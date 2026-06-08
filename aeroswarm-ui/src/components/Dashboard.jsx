@@ -9,7 +9,7 @@ import { getToken, logout } from '../services/authService'
 import { fetchConfig, sendSetHome } from '../services/swarmService'
 import MissionPlanner from './MissionPlanner'
 
-const API = 'http://localhost:5501/api'
+const API = 'http://localhost:5000/api'
 const MAX_TRAIL = 20
 const MAX_LOGS = 100
 const DEFAULT_DRONE_IDS = [1, 2, 3, 4, 5]
@@ -132,7 +132,39 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
     ? 'bg-tertiary shadow-[0_0_5px_#ffb95f]'
     : 'bg-primary shadow-[0_0_5px_#adc6ff]'
 
-  const cmd = (action) => onCommand(droneId, action)
+  const [isPending, setIsPending] = useState(false)
+  const [lastCmd, setLastCmd] = useState(null)
+
+  const isArmed = drone?.isArmed
+  const mode = drone?.mode || 'STABILIZE'
+  const inFlight = isArmed && (mode === 'GUIDED' || mode === 'LOITER')
+  const inAuto = mode === 'LAND' || mode === 'RTL'
+
+  // Optimistic: if we just sent takeoff/guided, lock disarm until telemetry confirms
+  const optimisticFlying = lastCmd === 'takeoff' || lastCmd === 'guided' || lastCmd === 'rtl' || lastCmd === 'land'
+
+  const can = {
+    arm: !isArmed && !inAuto && !optimisticFlying,
+    disarm: isArmed && !inFlight && !inAuto && !optimisticFlying,
+    rtl: isArmed && !inAuto,
+    land: isArmed && !inAuto,
+    guided: !inAuto && !optimisticFlying,
+    takeoff: !inFlight && !inAuto,
+  }
+
+  const cmd = async (action) => {
+    if (isPending || !can[action]) return
+    setIsPending(true)
+    setLastCmd(action)
+    try {
+      await onCommand(droneId, action)
+    } finally {
+      setTimeout(() => {
+        setIsPending(false)
+        setLastCmd(null)
+      }, 2500)
+    }
+  }
 
   if (!drone) {
     return (
@@ -208,24 +240,34 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
           { action: 'disarm', label: 'DISARM', icon: 'power_settings_new', cls: 'hover:bg-error/20 hover:text-error hover:border-error/40' },
           { action: 'rtl', label: 'RTL', icon: 'home', cls: 'hover:bg-tertiary/20 hover:text-tertiary hover:border-tertiary/40' },
           { action: 'land', label: 'LAND', icon: 'flight_land', cls: 'hover:bg-primary/20 hover:text-primary hover:border-primary/40' },
-        ].map(({ action, label, icon, cls }) => (
-          <button key={action} onClick={() => cmd(action)}
-            className={`flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 ${cls}`}>
-            <span className="material-symbols-outlined text-[14px]">{icon}</span>
-            {label}
-          </button>
-        ))}
+        ].map(({ action, label, icon, cls }) => {
+          const ok = can[action] && !isPending
+          return (
+            <button key={action} onClick={() => ok && cmd(action)}
+              disabled={!ok}
+              className={`flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 ${cls} ${!ok ? 'opacity-40 cursor-not-allowed' : ''}`}>
+              <span className="material-symbols-outlined text-[14px]">{icon}</span>
+              {label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Command Buttons Row 2: GUIDED/TAKEOFF/SELECT (Click-to-Fly) */}
       <div className="flex gap-1.5">
-        <button onClick={() => cmd('guided')}
-          className="flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 hover:bg-primary/20 hover:text-primary hover:border-primary/40">
+        <button onClick={() => can.guided && !isPending && cmd('guided')}
+          disabled={!can.guided || isPending}
+          className={`flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 hover:bg-primary/20 hover:text-primary hover:border-primary/40 ${(!can.guided || isPending) ? 'opacity-40 cursor-not-allowed' : ''}`}>
           <span className="material-symbols-outlined text-[14px]">joystick</span>
           GUIDED
         </button>
-        <button onClick={() => onTakeoff(droneId)}
-          className="flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 hover:bg-secondary/20 hover:text-secondary hover:border-secondary/40">
+        <button onClick={async () => {
+            if (!can.takeoff || isPending) return
+            setIsPending(true)
+            try { await onTakeoff(droneId) } finally { setTimeout(() => setIsPending(false), 1200) }
+          }}
+          disabled={!can.takeoff || isPending}
+          className={`flex-1 bg-surface-container-high text-on-surface border border-outline-variant/30 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 hover:bg-secondary/20 hover:text-secondary hover:border-secondary/40 ${(!can.takeoff || isPending) ? 'opacity-40 cursor-not-allowed' : ''}`}>
           <span className="material-symbols-outlined text-[14px]">flight_takeoff</span>
           TAKEOFF
         </button>
@@ -325,7 +367,7 @@ export default function Dashboard() {
   // SignalR connection
   useEffect(() => {
     const connection = new HubConnectionBuilder()
-      .withUrl('http://localhost:5501/hubs/drone', {
+      .withUrl('http://localhost:5000/hubs/drone', {
         accessTokenFactory: () => getToken(),
       })
       .withAutomaticReconnect()

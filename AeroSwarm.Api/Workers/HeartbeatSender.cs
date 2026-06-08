@@ -38,7 +38,10 @@ public class HeartbeatSender : BackgroundService
         {
             foreach (var id in _opts.DroneIds)
             {
-                if (!_stateService.TryGetIp(id, out var ip)) continue;
+                if (!_stateService.TryGetIp(id, out var ip))
+                {
+                    ip = "255.255.255.255"; // broadcast until drone is discovered
+                }
                 try
                 {
                     var endpoint = new IPEndPoint(IPAddress.Parse(ip), _opts.UdpPort);

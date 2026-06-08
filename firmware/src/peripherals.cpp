@@ -27,6 +27,7 @@ void init() {
     digitalWrite(ONBOARD_LED_PIN, HIGH); // active-low → off
 
 #ifdef DEMO_DRONE
+    Serial.println("[PERIPH] DEMO_DRONE init start");
     ledcSetup(RGB_R_CHAN, 5000, 8); ledcAttachPin(RGB_R_PIN, RGB_R_CHAN);
     ledcSetup(RGB_G_CHAN, 5000, 8); ledcAttachPin(RGB_G_PIN, RGB_G_CHAN);
     ledcSetup(RGB_B_CHAN, 5000, 8); ledcAttachPin(RGB_B_PIN, RGB_B_CHAN);
@@ -35,9 +36,14 @@ void init() {
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(BUZZER_PIN, LOW);
 
+    pinMode(MOTOR_PIN, OUTPUT);
+    digitalWrite(MOTOR_PIN, LOW);   // ensure TIP120 is off before PWM attach
     ledcSetup(MOTOR_CHAN, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
     ledcAttachPin(MOTOR_PIN, MOTOR_CHAN);
     ledcWrite(MOTOR_CHAN, 0);
+    Serial.println("[PERIPH] DEMO_DRONE init done");
+#else
+    Serial.println("[PERIPH] DEMO_DRONE NOT defined");
 #endif
 }
 
@@ -84,14 +90,14 @@ void tick() {
         r = 255; g = 80; b = 0; pulse = true; pulsePeriod = 250;
     } else {
         switch (g_state) {
-            case FsmState::BOOT:    r = 200; g = 200; b = 200; break;
-            case FsmState::IDLE:    r = 60;  g = 100; b = 255; break;
-            case FsmState::ARMED:   r = 0;   g = 255; b = 60;  pulse = true; pulsePeriod = 1000; break;
-            case FsmState::TAKEOFF:
-            case FsmState::FLYING:  r = 0;   g = 255; b = 60;  pulse = true; pulsePeriod = 250;  break;
-            case FsmState::RTL:     r = 255; g = 140; b = 0;   pulse = true; pulsePeriod = 500;  break;
-            case FsmState::LANDING: r = 255; g = 140; b = 0;   pulse = true; pulsePeriod = 1000; break;
-            case FsmState::ERROR_STATE: r = 255; g = 0; b = 0; break;
+            case FsmState::BOOT:    r = 200; g = 200; b = 200; break;                       // Trắng
+            case FsmState::IDLE:    r = 60;  g = 100; b = 255; break;                       // Xanh dương
+            case FsmState::ARMED:   r = 255; g = 0;   b = 0;   pulse = true; pulsePeriod = 1000; break; // Đỏ nhấp nháy
+            case FsmState::TAKEOFF: r = 255; g = 200; b = 0;   pulse = true; pulsePeriod = 250;  break; // Vàng nhấp nhanh
+            case FsmState::FLYING:  r = 0;   g = 255; b = 60;  pulse = true; pulsePeriod = 250;  break; // Xanh lá nhấp nhanh
+            case FsmState::RTL:     r = 180; g = 0;   b = 255; pulse = true; pulsePeriod = 500;  break; // Tím nhấp nháy
+            case FsmState::LANDING: r = 255; g = 100; b = 0;   pulse = true; pulsePeriod = 1000; break; // Cam nhấp chậm
+            case FsmState::ERROR_STATE: r = 255; g = 0; b = 0; break;                       // Đỏ liên tục
         }
     }
 

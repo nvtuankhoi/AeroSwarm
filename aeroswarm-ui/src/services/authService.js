@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:5501/api'
+const BASE_URL = 'http://localhost:5000/api'
 const TOKEN_KEY = 'aeroswarm_token'
 
 export async function login(username, password) {
