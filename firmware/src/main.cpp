@@ -559,20 +559,20 @@ static void changeState(FsmState s, const char* reason) {
         case FsmState::TAKEOFF:
             g_targetLat = g_lat; g_targetLon = g_lon;  // climb in place
             g_hasTarget = true;
-            g_targetMotorThrottle = 18;   // ~7% — light spin, minimize Li-Po load
+            g_targetMotorThrottle = 10;   // ~4% — minimize brown-out on weak USB
             break;
         case FsmState::FLYING:
-            g_targetMotorThrottle = 20;   // ~8% cruise
+            g_targetMotorThrottle = 10;   // ~4% cruise
             break;
         case FsmState::RTL:
             g_targetLat = g_homeLat; g_targetLon = g_homeLon;
             g_targetAlt = g_homeAlt + 10.0f;
             g_hasTarget = g_homeSet;
-            g_targetMotorThrottle = 20;
+            g_targetMotorThrottle = 10;
             break;
         case FsmState::LANDING:
             g_targetAlt = 0.0f;
-            g_targetMotorThrottle = 15;   // ~6% descent
+            g_targetMotorThrottle = 8;    // ~3% descent
             break;
         case FsmState::IDLE:
             g_targetMotorThrottle = 0;
