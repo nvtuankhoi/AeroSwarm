@@ -669,6 +669,8 @@ static void gpsTick(float dt) {
         g_vx = g_vy = g_vz = 0;
         return;
     }
+    Serial.printf("[GPS] state=%d alt=%.2f targetAlt=%.2f dt=%.3f\n",
+                  (int)g_state, g_alt, g_targetAlt, dt);
 
     // Vertical
     float dAlt = g_targetAlt - g_alt;
