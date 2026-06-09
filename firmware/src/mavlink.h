@@ -21,6 +21,7 @@ constexpr uint32_t MSG_MISSION_CLEAR_ALL   = 45;
 constexpr uint32_t MSG_MISSION_ACK         = 47;
 constexpr uint32_t MSG_MISSION_REQUEST_INT = 51;
 constexpr uint32_t MSG_MISSION_ITEM_INT    = 73;
+constexpr uint32_t MSG_SET_POSITION_TARGET_GLOBAL_INT = 86;
 constexpr uint32_t MSG_COMMAND_LONG        = 76;
 constexpr uint32_t MSG_COMMAND_ACK         = 77;
 constexpr uint32_t MSG_BATTERY_STATUS      = 147;
@@ -48,6 +49,7 @@ inline uint8_t crcExtra(uint32_t msgId) {
         case MSG_MISSION_ACK:         return 153;
         case MSG_MISSION_REQUEST_INT: return 38;
         case MSG_MISSION_ITEM_INT:    return 38;
+        case MSG_SET_POSITION_TARGET_GLOBAL_INT: return 5;
         case MSG_COMMAND_LONG:        return 152;
         case MSG_COMMAND_ACK:         return 143;
         case MSG_BATTERY_STATUS:      return 154;
@@ -280,6 +282,28 @@ inline bool parseMissionCount(const uint8_t* payload, uint8_t len, MissionCountP
     out.targetSys = payload[2];
     out.targetComp = payload[3];
     out.missionType = payload[4];
+    return true;
+}
+
+struct SetPositionTargetGlobalIntPayload {
+    int32_t latE7;
+    int32_t lonE7;
+    float alt;
+    uint16_t typeMask;
+    uint8_t targetSys;
+    uint8_t targetComp;
+    uint8_t coordinateFrame;
+};
+
+inline bool parseSetPositionTargetGlobalInt(const uint8_t* payload, uint8_t len, SetPositionTargetGlobalIntPayload& out) {
+    if (len < 53) return false;
+    memcpy(&out.latE7, payload + 4, 4);
+    memcpy(&out.lonE7, payload + 8, 4);
+    memcpy(&out.alt, payload + 12, 4);
+    memcpy(&out.typeMask, payload + 48, 2);
+    out.targetSys = payload[50];
+    out.targetComp = payload[51];
+    out.coordinateFrame = payload[52];
     return true;
 }
 

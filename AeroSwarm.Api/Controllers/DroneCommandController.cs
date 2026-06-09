@@ -42,10 +42,15 @@ public class DroneCommandController : ControllerBase
     public async Task<IActionResult> Arm(int droneId)
     {
         if (!Resolve(droneId, out var ip, out var port)) return BadRequest("Invalid drone ID");
+        // ArduPilot (SITL and real) may refuse ARM when in LAND/RTL mode.
+        // Send STABILIZE first to ensure the autopilot is in an armable state.
+        var modeFrame = MavlinkV2.EncodeSetMode((byte)droneId, baseMode: 1, customMode: 0);
+        await SendAsync(ip, port, modeFrame);
+
         var frame = MavlinkV2.EncodeCommandLong((byte)droneId, MavlinkV2.AutopilotCompId,
             MavlinkV2.CMD_COMPONENT_ARM_DISARM, p1: 1.0f);
         await SendAsync(ip, port, frame);
-        await LogAndBroadcast(droneId, "CMD", $"Sent MAV_CMD_COMPONENT_ARM (ARM) to Drone #{droneId}.");
+        await LogAndBroadcast(droneId, "CMD", $"Sent STABILIZE + MAV_CMD_COMPONENT_ARM (ARM) to Drone #{droneId}.");
         return Ok(new { message = $"ARM command sent to drone {droneId}" });
     }
 

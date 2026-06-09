@@ -107,6 +107,7 @@ static void onMissionCount(const mavlink::Decoded& m, IPAddress src);
 static void onMissionItemInt(const mavlink::Decoded& m, IPAddress src);
 static void onMissionClearAll();
 static void onNamedValueFloat(const mavlink::Decoded& m);
+static void onGoto(const mavlink::Decoded& m);
 static void changeState(FsmState s, const char* reason);
 static void txHeartbeat();
 static void txGlobalPosition();
@@ -171,6 +172,7 @@ void loop() {
                 case mavlink::MSG_MISSION_ITEM_INT: onMissionItemInt(msg, src); break;
                 case mavlink::MSG_MISSION_CLEAR_ALL: onMissionClearAll(); break;
                 case mavlink::MSG_NAMED_VALUE_FLOAT: onNamedValueFloat(msg); break;
+                case mavlink::MSG_SET_POSITION_TARGET_GLOBAL_INT: onGoto(msg); break;
             }
         }
     }
@@ -487,6 +489,18 @@ static void onNamedValueFloat(const mavlink::Decoded& m) {
     }
 }
 
+static void onGoto(const mavlink::Decoded& m) {
+    mavlink::SetPositionTargetGlobalIntPayload p;
+    if (!mavlink::parseSetPositionTargetGlobalInt(m.payload, m.payloadLen, p)) return;
+    if (p.targetSys != 0 && p.targetSys != g_sysId) return;
+    g_targetLat = p.latE7 / 1e7;
+    g_targetLon = p.lonE7 / 1e7;
+    g_targetAlt = p.alt;
+    g_hasTarget = true;
+    Serial.printf("[MAV] GOTO (%.6f, %.6f) alt=%.1f  frame=%u mask=%u\n",
+                  g_targetLat, g_targetLon, g_targetAlt, p.coordinateFrame, p.typeMask);
+}
+
 // ── State machine ─────────────────────────────────────────────────────
 static bool isFlightState(FsmState s) {
     return s == FsmState::TAKEOFF || s == FsmState::FLYING ||
@@ -633,15 +647,6 @@ static void gpsTick(float dt) {
     if (g_state != FsmState::TAKEOFF && g_state != FsmState::FLYING &&
         g_state != FsmState::RTL     && g_state != FsmState::LANDING) {
         g_vx = g_vy = g_vz = 0;
-        return;
-    }
-
-    // When synced to SITL, skip local virtual GPS drift.
-    // SITL drives lat/lon/alt directly via AS_LAT / AS_LON / AS_ALT.
-    if (g_syncActive) {
-        // Keep vertical velocity plausible for telemetry TX
-        g_vz = (g_targetAlt > g_alt) ? V_CLIMB_MPS : (g_targetAlt < g_alt) ? -V_CLIMB_MPS : 0.0f;
-        // Heading and ground speed come from SITL already; keep last known
         return;
     }
 
