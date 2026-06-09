@@ -142,6 +142,15 @@ void setup() {
 
     loadMissionFromNvs();
 
+    // Initialize virtual GPS near HCMC with per-drone offset so swarm
+    // drones don't stack at (0,0). 0.0001 deg ≈ 11 m apart.
+    g_lat = DEFAULT_HOME_LAT + (g_sysId - 1) * 0.0001;
+    g_lon = DEFAULT_HOME_LON + (g_sysId - 1) * 0.0001;
+    g_homeLat = g_lat;
+    g_homeLon = g_lon;
+    g_homeAlt = DEFAULT_HOME_ALT;
+    g_homeSet = true;
+
     connectWifi();
     setupOta();
 
@@ -391,7 +400,11 @@ static void onSetMode(const mavlink::Decoded& m) {
             peripherals::buzzerPlay(BuzzerPattern::RTL_START);
             break;
         case 9: changeState(FsmState::LANDING, "set_mode land"); break;
-        case 4: /* GUIDED — stay in current state but armed */ break;
+        case 4:
+            if (g_state == FsmState::IDLE || g_state == FsmState::ARMED) {
+                changeState(FsmState::FLYING, "set_mode guided");
+            }
+            break;
         default: break;
     }
 }
@@ -499,6 +512,11 @@ static void onGoto(const mavlink::Decoded& m) {
     g_hasTarget = true;
     Serial.printf("[MAV] GOTO (%.6f, %.6f) alt=%.1f  frame=%u mask=%u\n",
                   g_targetLat, g_targetLon, g_targetAlt, p.coordinateFrame, p.typeMask);
+
+    // Auto-transition to flying if GOTO received while on ground
+    if (g_state == FsmState::IDLE || g_state == FsmState::ARMED) {
+        changeState(FsmState::FLYING, "goto auto");
+    }
 }
 
 // ── State machine ─────────────────────────────────────────────────────

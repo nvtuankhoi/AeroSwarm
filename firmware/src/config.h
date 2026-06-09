@@ -63,10 +63,11 @@ constexpr uint32_t FSM_TICK_MS = 200;   // slow ramp to avoid Li-Po brownout
 constexpr const char* OTA_PASSWORD = "aeroswarm";
 
 // ── Default home (will be overridden via MAV_CMD_DO_SET_HOME) ─────────
-// Initialize to (0,0) so a missing set_home is visible. The first
-// GLOBAL_POSITION_INT after takeoff will use the home as start point.
-constexpr double DEFAULT_HOME_LAT = 0.0;
-constexpr double DEFAULT_HOME_LON = 0.0;
+// Start swarm near Ho Chi Minh City with a small per-drone offset so
+// multiple ESP32 drones don't stack on top of each other on the map.
+// 0.0001 deg ≈ 11 m separation.
+constexpr double DEFAULT_HOME_LAT = 10.7629;
+constexpr double DEFAULT_HOME_LON = 106.6823;
 constexpr float  DEFAULT_HOME_ALT = 0.0f;
 
 // ── SITL sync (when ESP32 is a "body" paired with a SITL "brain") ────
