@@ -557,7 +557,7 @@ static void changeState(FsmState s, const char* reason) {
 
     // Drone 3 runs higher motor throttle (~30%) because its USB port
     // can supply more current. Other drones stay at ~4% to avoid brownout.
-    uint8_t mt = 10;   // 10/255 ≈ 4%
+    uint8_t mt = 64;   // 64/255 ≈ 25%
 
     switch (s) {
         case FsmState::TAKEOFF:

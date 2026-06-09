@@ -29,13 +29,6 @@ function droneColor(drone) {
   return '#adc6ff'                                 // primary/blue
 }
 
-function batteryIcon(pct) {
-  if (pct > 75) return 'battery_full'
-  if (pct > 50) return 'battery_5_bar'
-  if (pct > 25) return 'battery_3_bar'
-  return 'battery_1_bar'
-}
-
 function createDroneIcon(color, heading, isSelected = false) {
   const ring = isSelected
     ? `<circle cx="16" cy="16" r="15" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.9" stroke-dasharray="4 3"/>`
@@ -216,10 +209,10 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
         </div>
         <div className="text-right flex flex-col items-end">
           <div className={`flex items-center gap-1 ${statusTextClass}`}>
-            <span className="material-symbols-outlined text-[16px]">{batteryIcon(drone.batteryPercent)}</span>
-            <span className="font-mono text-sm font-medium">{drone.batteryPercent}%</span>
+            <span className="material-symbols-outlined text-[16px]">battery_full</span>
+            <span className="font-mono text-sm font-medium">100%</span>
           </div>
-          <span className="font-mono text-xs text-outline mt-0.5">{drone.batteryVoltage?.toFixed(1)}V</span>
+          <span className="font-mono text-xs text-outline mt-0.5">5.0V</span>
         </div>
       </div>
 
@@ -676,7 +669,7 @@ export default function Dashboard() {
                     <Popup>
                       <div className="font-mono text-xs" style={{ color: '#d5e3fd', minWidth: 130 }}>
                         <div className="font-bold" style={{ color }}>DRONE #{id}</div>
-                        <div>BAT: {drone.batteryPercent}% · {drone.batteryVoltage?.toFixed(1)}V</div>
+                        <div>BAT: 100% · 5.0V</div>
                         <div>ALT: {drone.altitude?.toFixed(1)}m · {drone.speed?.toFixed(1)} m/s</div>
                         <div>{drone.mode} | {drone.isArmed ? 'ARMED' : 'DISARMED'}</div>
                         <div style={{ marginTop: 4, color: '#4ae176', cursor: 'pointer' }}
