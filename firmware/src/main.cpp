@@ -399,9 +399,8 @@ static void onSetMode(const mavlink::Decoded& m) {
             break;
         case 9: changeState(FsmState::LANDING, "set_mode land"); break;
         case 4:
-            if (g_state == FsmState::IDLE || g_state == FsmState::ARMED) {
-                changeState(FsmState::FLYING, "set_mode guided");
-            }
+            // GUIDED mode is accepted but does NOT auto-transition state.
+            // The drone must reach FLYING via TAKEOFF first.
             break;
         default: break;
     }
@@ -504,17 +503,18 @@ static void onGoto(const mavlink::Decoded& m) {
     mavlink::SetPositionTargetGlobalIntPayload p;
     if (!mavlink::parseSetPositionTargetGlobalInt(m.payload, m.payloadLen, p)) return;
     if (p.targetSys != 0 && p.targetSys != g_sysId) return;
+    // Reject GOTO if not already flying (must TAKEOFF first)
+    if (g_state != FsmState::FLYING) {
+        txStatusText(4, "Goto rejected: not flying");
+        return;
+    }
+
     g_targetLat = p.latE7 / 1e7;
     g_targetLon = p.lonE7 / 1e7;
     g_targetAlt = p.alt;
     g_hasTarget = true;
     Serial.printf("[MAV] GOTO (%.6f, %.6f) alt=%.1f  frame=%u mask=%u\n",
                   g_targetLat, g_targetLon, g_targetAlt, p.coordinateFrame, p.typeMask);
-
-    // Auto-transition to flying if GOTO received while on ground
-    if (g_state == FsmState::IDLE || g_state == FsmState::ARMED) {
-        changeState(FsmState::FLYING, "goto auto");
-    }
 }
 
 // ── State machine ─────────────────────────────────────────────────────
