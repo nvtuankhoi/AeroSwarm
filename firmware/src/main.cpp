@@ -544,6 +544,8 @@ static void changeState(FsmState s, const char* reason) {
         case FsmState::IDLE:
             g_targetMotorThrottle = 0;
             g_hasTarget = false;
+            g_alt = 0.0f;
+            g_targetAlt = 0.0f;
             break;
         case FsmState::ARMED:
             g_targetMotorThrottle = 0;    // props off when armed

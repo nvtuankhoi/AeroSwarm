@@ -22,6 +22,9 @@ public class MavlinkWorker : BackgroundService
 
     private readonly Dictionary<int, DateTime> _lastDbWrite = new();
     private readonly HashSet<int> _streamRequestsSent = new();
+    // SITL sends relative_alt as MSL (sea-level) because EKF origin is at 0.
+    // Store the first observed relative_alt per drone as ground level and subtract it.
+    private readonly Dictionary<int, int> _groundAltMm = new();
 
     public bool IsRunning { get; private set; }
     public IReadOnlyList<IPEndPoint> BoundEndpoints { get; private set; } = new List<IPEndPoint>();
@@ -153,9 +156,15 @@ public class MavlinkWorker : BackgroundService
                             short vy = BinaryPrimitives.ReadInt16LittleEndian(p.Slice(22, 2));
                             ushort hdg = BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(26, 2));
 
+                            // SITL EKF origin is at sea level, so relative_alt ≈ MSL.
+                            // Subtract the first observed disarmed altitude as ground offset.
+                            if (!_groundAltMm.ContainsKey(droneId))
+                            {
+                                _groundAltMm[droneId] = relAlt;
+                            }
                             t.Latitude = lat / 1e7;
                             t.Longitude = lon / 1e7;
-                            t.Altitude = relAlt / 1000f;
+                            t.Altitude = (relAlt - _groundAltMm[droneId]) / 1000f;
                             t.Speed = (float)Math.Sqrt(vx * vx + vy * vy) / 100f;
                             t.Heading = hdg / 100f;
                             t.LinkQuality = 100;
