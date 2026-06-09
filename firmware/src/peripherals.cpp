@@ -13,9 +13,10 @@ static FsmState g_state = FsmState::BOOT;
 static BattWarn g_battWarn = BattWarn::NORMAL;
 
 static void rgbWrite(uint8_t r, uint8_t g, uint8_t b) {
-    ledcWrite(RGB_R_CHAN, r);
-    ledcWrite(RGB_G_CHAN, g);
-    ledcWrite(RGB_B_CHAN, b);
+    // Reduce brightness to ~25% to lower current draw and prevent brown-out
+    ledcWrite(RGB_R_CHAN, r >> 2);
+    ledcWrite(RGB_G_CHAN, g >> 2);
+    ledcWrite(RGB_B_CHAN, b >> 2);
 }
 #endif
 
@@ -139,7 +140,7 @@ void tick() {
             default: break;
         }
         if (seq && g_buzzerStep < seqLen) {
-            digitalWrite(BUZZER_PIN, seq[g_buzzerStep].on ? HIGH : LOW);
+            digitalWrite(BUZZER_PIN, LOW); // Buzzer disabled to save power
             g_buzzerNextChange = now + seq[g_buzzerStep].dur;
             g_buzzerStep++;
             if (g_buzzerStep >= seqLen) {
