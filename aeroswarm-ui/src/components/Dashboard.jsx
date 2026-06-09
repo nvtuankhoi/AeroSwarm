@@ -155,7 +155,7 @@ function DroneTelemetryCard({ droneId, drone, onCommand, onTakeoff, onSelect, is
     disarm: isArmed && !isFlying && !inAuto && !optimisticFlying,
     rtl: isArmed && !inAuto,
     land: isArmed && !inAuto,
-    guided: !inAuto && !optimisticFlying && mode !== 'GUIDED',
+    guided: isArmed && !inAuto && !optimisticFlying && mode !== 'GUIDED',
     takeoff: isArmed && !isFlying && !inAuto,
   }
 
