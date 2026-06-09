@@ -363,12 +363,8 @@ static void onCommandLong(const mavlink::Decoded& m, IPAddress src) {
                 g_homeLon = c.p[5];
                 g_homeAlt = c.p[6];
                 g_homeSet = true;
-                // Initialize current position to home if not flying yet
-                if (g_state == FsmState::IDLE || g_state == FsmState::ARMED) {
-                    g_lat = g_homeLat;
-                    g_lon = g_homeLon;
-                    g_alt = g_homeAlt;
-                }
+                // Do NOT override current GPS position — SET_HOME should only
+                // define the RTL return point, not teleport the drone.
                 Serial.printf("[MAV] HOME set to (%.6f, %.6f)\n", g_homeLat, g_homeLon);
                 txStatusText(6, "Home set");
             } else {
@@ -669,8 +665,6 @@ static void gpsTick(float dt) {
         g_vx = g_vy = g_vz = 0;
         return;
     }
-    Serial.printf("[GPS] state=%d alt=%.2f targetAlt=%.2f dt=%.3f\n",
-                  (int)g_state, g_alt, g_targetAlt, dt);
 
     // Vertical
     float dAlt = g_targetAlt - g_alt;
