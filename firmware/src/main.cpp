@@ -218,6 +218,15 @@ void loop() {
     if (now - g_lastHbTx >= HEARTBEAT_TX_MS) { g_lastHbTx = now; txHeartbeat(); }
     if (now - g_lastPosTx >= POSITION_TX_MS) { g_lastPosTx = now; txGlobalPosition(); }
 
+    // WiFi debug log every 5s
+    static uint32_t s_lastWifiLog = 0;
+    if (now - s_lastWifiLog >= 5000) {
+        s_lastWifiLog = now;
+        Serial.printf("[WIFI] status=%d rssi=%d ip=%s\n",
+                      WiFi.status(), WiFi.RSSI(),
+                      WiFi.localIP().toString().c_str());
+    }
+
     // WiFi reconnect
     if (WiFi.status() != WL_CONNECTED) {
         static uint32_t lastReconnectAttempt = 0;
@@ -664,7 +673,7 @@ static void fsmTick() {
     } else if (g_currentMotorThrottle > g_targetMotorThrottle) {
         g_currentMotorThrottle--;
     }
-    Serial.printf("[MOTOR] state=%d curr=%d target=%d\n", (int)g_state, g_currentMotorThrottle, g_targetMotorThrottle);
+    // Serial.printf("[MOTOR] state=%d curr=%d target=%d\n", (int)g_state, g_currentMotorThrottle, g_targetMotorThrottle);
     peripherals::motorsSet(g_currentMotorThrottle);
 }
 
@@ -838,7 +847,7 @@ static void txMissionRequestInt(uint8_t targetSys, uint16_t seq) {
 static void sendUdp(const uint8_t* data, int len, IPAddress dst) {
     if (dst == IPAddress(0, 0, 0, 0)) {
         if (g_gcsSeen) dst = g_gcsIp;
-        else dst = IPAddress(255, 255, 255, 255);
+        else dst = WiFi.broadcastIP();
     }
     g_udp.beginPacket(dst, g_udpPort);
     g_udp.write(data, len);
