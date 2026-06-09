@@ -7,10 +7,9 @@
 #endif
 
 // ── Network ───────────────────────────────────────────────────────────
-// Port auto-derived from sysid so each drone gets its own channel:
+// Base port; per-drone port computed at runtime from g_sysId:
 //   sysid 1 → 14550, sysid 2 → 14560, sysid 3 → 14570, ...
-constexpr uint16_t GCS_UDP_PORT   = 14550 + (DEFAULT_SYSID - 1) * 10;
-constexpr uint16_t LOCAL_UDP_PORT = 14550 + (DEFAULT_SYSID - 1) * 10;
+constexpr uint16_t BASE_UDP_PORT = 14550;
 
 // ── Pinout (ESP32-C3 Super Mini) ──────────────────────────────────────
 constexpr uint8_t BATT_ADC_PIN     = 3;    // ADC1_CH3

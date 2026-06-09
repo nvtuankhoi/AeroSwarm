@@ -41,6 +41,7 @@ Preferences g_pref;
 WiFiManager g_wm;
 
 uint8_t   g_sysId = DEFAULT_SYSID;
+uint16_t  g_udpPort = BASE_UDP_PORT;
 FsmState  g_state = FsmState::BOOT;
 static uint8_t g_currentMotorThrottle = 0;
 static uint8_t g_targetMotorThrottle = 0;
@@ -154,8 +155,9 @@ void setup() {
     connectWifi();
     setupOta();
 
-    g_udp.begin(LOCAL_UDP_PORT);
-    Serial.printf("[UDP] listening on %d\n", LOCAL_UDP_PORT);
+    g_udpPort = BASE_UDP_PORT + (g_sysId - 1) * 10;
+    g_udp.begin(g_udpPort);
+    Serial.printf("[UDP] listening on %d (sysid=%d)\n", g_udpPort, g_sysId);
 
     changeState(FsmState::IDLE, "boot complete");
     peripherals::buzzerPlay(BuzzerPattern::BOOT_DONE);
@@ -830,7 +832,7 @@ static void sendUdp(const uint8_t* data, int len, IPAddress dst) {
         if (g_gcsSeen) dst = g_gcsIp;
         else dst = IPAddress(255, 255, 255, 255);
     }
-    g_udp.beginPacket(dst, GCS_UDP_PORT);
+    g_udp.beginPacket(dst, g_udpPort);
     g_udp.write(data, len);
     g_udp.endPacket();
 }
