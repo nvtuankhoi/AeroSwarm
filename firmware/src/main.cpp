@@ -555,24 +555,28 @@ static void changeState(FsmState s, const char* reason) {
     g_state = s;
     peripherals::setFsmState(s, g_battWarn);
 
+    // Drone 3 runs higher motor throttle (~30%) because its USB port
+    // can supply more current. Other drones stay at ~4% to avoid brownout.
+    uint8_t mt = (g_sysId == 3) ? 77 : 10;   // 77/255 ≈ 30%, 10/255 ≈ 4%
+
     switch (s) {
         case FsmState::TAKEOFF:
             g_targetLat = g_lat; g_targetLon = g_lon;  // climb in place
             g_hasTarget = true;
-            g_targetMotorThrottle = 10;   // ~4% — minimize brown-out on weak USB
+            g_targetMotorThrottle = mt;
             break;
         case FsmState::FLYING:
-            g_targetMotorThrottle = 10;   // ~4% cruise
+            g_targetMotorThrottle = mt;   // cruise
             break;
         case FsmState::RTL:
             g_targetLat = g_homeLat; g_targetLon = g_homeLon;
             g_targetAlt = g_homeAlt + 10.0f;
             g_hasTarget = g_homeSet;
-            g_targetMotorThrottle = 10;
+            g_targetMotorThrottle = mt;
             break;
         case FsmState::LANDING:
             g_targetAlt = 0.0f;
-            g_targetMotorThrottle = 8;    // ~3% descent
+            g_targetMotorThrottle = (g_sysId == 3) ? 60 : 8;  // drone 3 = ~23%, others = ~3%
             break;
         case FsmState::IDLE:
             g_targetMotorThrottle = 0;
