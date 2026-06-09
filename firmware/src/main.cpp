@@ -135,9 +135,17 @@ void setup() {
 
     peripherals::init();
 
-    // Load SysID from NVS (overrides build flag if previously set)
+    // SysID: build flag wins over NVS to prevent stale values when
+    // re-flashing a different env (e.g. demo_sysid1 → demo_sysid3).
     g_pref.begin(NVS_NS_DRONE, false);
-    g_sysId = g_pref.getUChar("sysid", DEFAULT_SYSID);
+    uint8_t nvsSysId = g_pref.getUChar("sysid", DEFAULT_SYSID);
+    if (nvsSysId != DEFAULT_SYSID) {
+        Serial.printf("[NVS] overriding stored sysid %d -> build sysid %d\n", nvsSysId, DEFAULT_SYSID);
+        g_sysId = DEFAULT_SYSID;
+        g_pref.putUChar("sysid", g_sysId);
+    } else {
+        g_sysId = nvsSysId;
+    }
     Serial.printf("[NVS] sysid=%d\n", g_sysId);
     g_pref.end();
 
